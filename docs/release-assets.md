@@ -2,9 +2,13 @@
 
 ## arialuni_sdf_u2019
 
-`arialuni_sdf_u2019` 是推荐的 TMP 字体替换资产，适用于 TMP font asset 或 bundle 结构与该流程匹配的 Unity 游戏。
+`arialuni_sdf_u2019` 是给 TMP 字体替换流程使用的本地资产。它不提交到 git，用户从 GitHub Release 下载后放进 `unity-text-locator` skill 的 `assets` 目录。
 
-该文件应上传到 GitHub Releases，不要提交到 git。
+安装后的推荐路径：
+
+```text
+%USERPROFILE%\.codex\skills\unity-text-locator\assets\arialuni_sdf_u2019
+```
 
 准备本仓库时使用的本地参考资产信息：
 
@@ -14,7 +18,7 @@ size: 30986431 bytes
 sha256: 11B47CAE3262648DD9C8B8A29DC25D04309A18790E4130E94FD230791E55C037
 ```
 
-推荐的 release 结构：
+release 结构：
 
 ```text
 Release vX.Y.Z
@@ -22,10 +26,10 @@ Release vX.Y.Z
   arialuni_sdf_u2019
 ```
 
-下载后的推荐校验命令：
+下载到 skill 目录后的校验命令：
 
 ```powershell
-Get-FileHash .\font-assets\arialuni_sdf_u2019 -Algorithm SHA256
+Get-FileHash "$env:USERPROFILE\.codex\skills\unity-text-locator\assets\arialuni_sdf_u2019" -Algorithm SHA256
 ```
 
 哈希应匹配：
@@ -37,6 +41,6 @@ Get-FileHash .\font-assets\arialuni_sdf_u2019 -Algorithm SHA256
 ## 发布策略
 
 - `arialuni_sdf_u2019` 不进入 git 历史。
-- 在 release notes 中说明字体来源与再分发假设。
-- 如果无法确认公开再分发授权，不要附加该文件，改为说明用户如何自行提供本地资产。
+- release notes 说明它是单独附件，不属于源码许可证覆盖范围。
+- 用户下载后放进 `unity-text-locator/assets/`。
 - 对无法安全替换 TMP 资产的游戏，运行时字体 fallback 仍作为兼容方案保留。

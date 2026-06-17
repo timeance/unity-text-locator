@@ -45,10 +45,20 @@ $env:AINIEE_PY = "$env:USERPROFILE\.venvs\ainiee-translate\Scripts\python.exe"
 
 ## 字体 Release 资产
 
-从 GitHub Release assets 下载 `arialuni_sdf_u2019` 到本地路径，例如：
+安装 `unity-text-locator` skill 后，把 release 里的 `arialuni_sdf_u2019` 下载到 skill 的 `assets` 目录：
 
-```text
-font-assets/arialuni_sdf_u2019
+```powershell
+$skillDir = "$env:USERPROFILE\.codex\skills\unity-text-locator"
+New-Item -ItemType Directory "$skillDir\assets" -Force
+Invoke-WebRequest `
+  "https://github.com/timeance/unity-text-locator/releases/latest/download/arialuni_sdf_u2019" `
+  -OutFile "$skillDir\assets\arialuni_sdf_u2019"
 ```
 
-不要把字体资产提交进 git。若只是本地测试，可以放在 `.gitignore` 已忽略的目录中。
+校验下载结果：
+
+```powershell
+Get-FileHash "$skillDir\assets\arialuni_sdf_u2019" -Algorithm SHA256
+```
+
+不要把字体资产提交进 git；它只需要留在本机的 skill 目录里。

@@ -45,9 +45,23 @@ Unity 扫描/提取
 
 ## 字体资产
 
-默认推荐的 TMP 字体替换资产是 `arialuni_sdf_u2019`。
+`arialuni_sdf_u2019` 不放在 git 里，文件太大，也不适合混进源码历史。需要用到字体替换时，从本仓库的 GitHub Release 下载它，然后放进已安装的 `unity-text-locator` skill 文件夹：
 
-不要把该二进制文件提交到 git。发布时将它作为 GitHub Release asset 上传，用户运行字体替换前再下载到本地。准备本仓库时使用的本地参考资产信息如下：
+```powershell
+$skillDir = "$env:USERPROFILE\.codex\skills\unity-text-locator"
+New-Item -ItemType Directory "$skillDir\assets" -Force
+Invoke-WebRequest `
+  "https://github.com/timeance/unity-text-locator/releases/latest/download/arialuni_sdf_u2019" `
+  -OutFile "$skillDir\assets\arialuni_sdf_u2019"
+```
+
+下载后可以顺手校验一下：
+
+```powershell
+Get-FileHash "$skillDir\assets\arialuni_sdf_u2019" -Algorithm SHA256
+```
+
+当前 release 附件的参考信息：
 
 ```text
 name: arialuni_sdf_u2019
@@ -55,7 +69,7 @@ size: 30986431 bytes
 sha256: 11B47CAE3262648DD9C8B8A29DC25D04309A18790E4130E94FD230791E55C037
 ```
 
-更多说明见 [docs/release-assets.md](docs/release-assets.md) 和 [unity-text-locator/references/font-asset-replacement.md](unity-text-locator/references/font-asset-replacement.md)。
+字体文件放好之后，翻译 skill 在处理 TMP 字体替换时会按这个本地文件来做。更多细节见 [docs/release-assets.md](docs/release-assets.md) 和 [unity-text-locator/references/font-asset-replacement.md](unity-text-locator/references/font-asset-replacement.md)。
 
 ## 许可证
 
@@ -63,7 +77,7 @@ sha256: 11B47CAE3262648DD9C8B8A29DC25D04309A18790E4130E94FD230791E55C037
 
 `ainiee-translate/scripts/ainiee_translate/_vendor/` 中包含来自 [NEKOparapa/AiNiee](https://github.com/NEKOparapa/AiNiee) 的 AGPL-3.0 代码，顶层 [NOTICE](NOTICE) 和 vendored notice 中保留了上游来源、commit 与修改说明。
 
-`arialuni_sdf_u2019` 字体资产不属于本仓库代码许可证的一部分。若作为 GitHub Release asset 发布，需要单独确认它的再分发授权。
+`arialuni_sdf_u2019` 是单独发布的 release 附件，不属于本仓库源码许可证覆盖范围。若你 fork 后重新分发自己的 release，请自行确认该字体资产的授权条件。
 
 ## 安装
 
@@ -88,5 +102,5 @@ $env:AINIEE_PY = "$env:USERPROFILE\.venvs\ainiee-translate\Scripts\python.exe"
 
 - 本仓库在 `ainiee-translate/scripts/ainiee_translate/_vendor/` 下包含来自 [NEKOparapa/AiNiee](https://github.com/NEKOparapa/AiNiee) 的适配组件；发布时请保留 vendored notice 和上游署名。
 - `CHANGELOG.md` 不放入仓库。公开更新记录使用 GitHub Releases。
-- 游戏文件、生成的翻译报告、写回备份和字体二进制应保留在本地；只有在授权允许时，才作为 Release asset 附加发布。
+- 游戏文件、生成的翻译报告、写回备份不要提交。字体二进制只作为 Release 附件下载到本地 skill 目录。
 - 这两个 skill 是可移植源码层。venv、缓存、本地字体路径和具体游戏路径都属于机器本地状态，不应提交。

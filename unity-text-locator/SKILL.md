@@ -275,7 +275,7 @@ For Addressables or IL2CPP metadata, require a backup and an integrity plan befo
 
 Treat remaining Japanese as a translation/extraction gap and tofu boxes as a font/glyph problem. Inspect `Player.log` and determine whether the text object uses TMP or legacy UI before applying a fix.
 
-Preferred published workflow: replace the reviewed target TMP font asset/bundle with the Release asset `arialuni_sdf_u2019`, then launch the game and verify Chinese glyph rendering. Keep the original target file backup and record the `arialuni_sdf_u2019` SHA256 from the release asset.
+Preferred published workflow: ask the user to download the Release asset `arialuni_sdf_u2019` into the installed `unity-text-locator/assets/` directory, replace the reviewed target TMP font asset/bundle with that local file, then launch the game and verify Chinese glyph rendering. Keep the original target file backup and record the `arialuni_sdf_u2019` SHA256 from the release asset.
 
 Use runtime fallback only when direct `arialuni_sdf_u2019` replacement is not compatible with the game's asset layout. For compatible Mono/TMP games with `ScriptingAssemblies.json` and `RuntimeInitializeOnLoads.json`, run:
 

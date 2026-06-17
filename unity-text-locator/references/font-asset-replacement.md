@@ -1,6 +1,6 @@
 # Font Asset Replacement
 
-Preferred published font workflow: replace the reviewed target TMP font asset/bundle with the GitHub Release asset `arialuni_sdf_u2019`.
+Preferred published font workflow: ask the user to download the GitHub Release asset `arialuni_sdf_u2019` into the installed `unity-text-locator/assets/` directory, then replace the reviewed target TMP font asset/bundle with that local file.
 
 ## Release Asset
 
@@ -12,16 +12,16 @@ size: 30986431 bytes
 sha256: 11B47CAE3262648DD9C8B8A29DC25D04309A18790E4130E94FD230791E55C037
 ```
 
-The asset is intentionally not committed to git. Download it from GitHub Releases into a local path such as:
+The asset is intentionally not committed to git. Download it from GitHub Releases into the installed skill folder:
 
 ```text
-font-assets/arialuni_sdf_u2019
+%USERPROFILE%\.codex\skills\unity-text-locator\assets\arialuni_sdf_u2019
 ```
 
 Verify it before use:
 
 ```powershell
-Get-FileHash .\font-assets\arialuni_sdf_u2019 -Algorithm SHA256
+Get-FileHash "$env:USERPROFILE\.codex\skills\unity-text-locator\assets\arialuni_sdf_u2019" -Algorithm SHA256
 ```
 
 ## When To Use It
