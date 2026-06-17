@@ -1,0 +1,10 @@
+# Runtime dependencies for ainiee-translate.
+# Keep this in sync with upstream pyproject.toml dependencies.
+msgspec
+beautifulsoup4
+lxml
+rich
+openpyxl
+polib
+python-pptx
+chardet

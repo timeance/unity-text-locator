@@ -1,0 +1,116 @@
+param(
+    [Parameter(Mandatory = $true)][string]$PatchDir,
+    [Parameter(Mandatory = $true)][string]$GameRoot
+)
+
+$ErrorActionPreference = "Stop"
+$PatchDir = [IO.Path]::GetFullPath($PatchDir)
+$GameRoot = [IO.Path]::GetFullPath($GameRoot)
+
+function Get-ByteHash([byte[]]$Bytes) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return -join ($sha.ComputeHash($Bytes) | ForEach-Object { $_.ToString("x2") })
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function Read-GZipPayload([string]$Path) {
+    $input = [IO.File]::OpenRead($Path)
+    $gzip = New-Object IO.Compression.GZipStream($input, [IO.Compression.CompressionMode]::Decompress)
+    $output = New-Object IO.MemoryStream
+    try {
+        $gzip.CopyTo($output)
+        return $output.ToArray()
+    }
+    finally {
+        $output.Dispose()
+        $gzip.Dispose()
+        $input.Dispose()
+    }
+}
+
+$manifestPath = Join-Path $PatchDir "manifest.json"
+$manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+if ($manifest.format -ne "unity-cn-middle-span-v1" -or $manifest.payload_compression -ne "gzip") {
+    throw "Unsupported patch manifest format."
+}
+
+$planned = @()
+$alreadyPatched = @()
+foreach ($entry in $manifest.files) {
+    $relative = $entry.path -replace "/", "\"
+    if ([IO.Path]::IsPathRooted($relative) -or (($relative -split "\\") -contains "..")) {
+        throw "Unsafe patch path: $relative"
+    }
+    $target = Join-Path $GameRoot $relative
+    if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+        throw "Target file missing: $relative"
+    }
+    [byte[]]$current = [IO.File]::ReadAllBytes($target)
+    $currentHash = Get-ByteHash $current
+    if ($currentHash -eq $entry.new_sha256) {
+        $alreadyPatched += $relative
+        continue
+    }
+    if ($currentHash -ne $entry.old_sha256) {
+        throw "Target does not match original or translated hash: $relative"
+    }
+    [byte[]]$middle = Read-GZipPayload (Join-Path $PatchDir ($entry.payload -replace "/", "\"))
+    $prefix = [int]$entry.prefix_bytes
+    $suffix = [int]$entry.suffix_bytes
+    [byte[]]$translated = New-Object byte[] ($prefix + $middle.Length + $suffix)
+    [Array]::Copy($current, 0, $translated, 0, $prefix)
+    [Array]::Copy($middle, 0, $translated, $prefix, $middle.Length)
+    if ($suffix -gt 0) {
+        [Array]::Copy($current, $current.Length - $suffix, $translated, $prefix + $middle.Length, $suffix)
+    }
+    if ((Get-ByteHash $translated) -ne $entry.new_sha256) {
+        throw "Payload hash verification failed: $relative"
+    }
+    $planned += [PSCustomObject]@{ Relative = $relative; Target = $target; Bytes = $translated }
+}
+
+$backupRoot = $null
+$written = @()
+if ($planned.Count -gt 0) {
+    $backupRoot = Join-Path $GameRoot ("_cn_patch_backup_" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+    foreach ($entry in $planned) {
+        $backup = Join-Path $backupRoot $entry.Relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $backup) -Force | Out-Null
+        Copy-Item -LiteralPath $entry.Target -Destination $backup -Force
+    }
+    try {
+        foreach ($entry in $planned) {
+            $temporary = $entry.Target + ".cnpatch.tmp"
+            [IO.File]::WriteAllBytes($temporary, $entry.Bytes)
+            Move-Item -LiteralPath $temporary -Destination $entry.Target -Force
+            $written += $entry.Relative
+        }
+    }
+    catch {
+        foreach ($relative in $written) {
+            Copy-Item -LiteralPath (Join-Path $backupRoot $relative) -Destination (Join-Path $GameRoot $relative) -Force
+        }
+        foreach ($entry in $planned) {
+            $temporary = $entry.Target + ".cnpatch.tmp"
+            if (Test-Path -LiteralPath $temporary) {
+                Remove-Item -LiteralPath $temporary -Force
+            }
+        }
+        throw
+    }
+}
+
+$result = [ordered]@{
+    game_root = $GameRoot
+    written_files = $written
+    already_patched = $alreadyPatched
+    backup_root = $backupRoot
+}
+if ($backupRoot) {
+    $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $backupRoot "install_report.json") -Encoding UTF8
+}
+$result | ConvertTo-Json -Depth 4

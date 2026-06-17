@@ -1,0 +1,30 @@
+unity-text-locator
+==================
+
+This repository is licensed under GNU AGPL-3.0-only. See LICENSE.
+
+Upstream attribution
+--------------------
+
+This repository includes `ainiee-translate`, an agent-side translation skill
+that vendors and adapts reader/export/cache components from:
+
+    Project : AiNiee
+    Source  : https://github.com/NEKOparapa/AiNiee
+    Commit  : ad937096bcd43ee84468f3ce4c48ff22a1e9eb6a  (2026-05-20)
+    License : GNU AGPL-3.0
+
+Vendored files live under:
+
+    ainiee-translate/scripts/ainiee_translate/_vendor/
+
+The detailed vendored notice is kept at:
+
+    ainiee-translate/scripts/ainiee_translate/_vendor/NOTICE
+
+Font assets
+-----------
+
+The `arialuni_sdf_u2019` TMP font asset is not committed to this repository.
+If distributed, it should be attached separately as a GitHub Release asset and
+its redistribution terms should be verified separately from this code license.

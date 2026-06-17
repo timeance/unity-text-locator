@@ -1,0 +1,33 @@
+# Local caches and generated files
+__pycache__/
+*.py[cod]
+*.bak
+*.tmp
+*.log
+
+# Keep release notes on GitHub Releases, not in the repository tree.
+CHANGELOG.md
+CHANGELOG.md.*
+
+# Game/build outputs
+_translation/
+unity-text-report/
+patch/
+dist/
+out/
+
+# Font release assets are uploaded to GitHub Releases instead of git.
+arialuni_sdf_u2019
+*.assetbundle
+*.bundle
+release-assets/
+assets-local/
+font-assets/
+
+# Local agent/editor state
+.codex/
+.agents/
+.venv/
+venv/
+.idea/
+.vscode/

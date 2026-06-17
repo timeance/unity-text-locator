@@ -1,0 +1,4 @@
+interface:
+  display_name: "Unity Translation Pipeline"
+  short_description: "Safely extract, validate, write and debug Unity translations."
+  default_prompt: "Use $unity-text-locator to inspect this Unity game, extract project-named one-column text CSVs, filter or write only validated rows through the correct serialized or runtime adapter, verify resource loading and Chinese font fallback, and locate save data when needed."
