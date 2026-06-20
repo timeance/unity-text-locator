@@ -1,6 +1,6 @@
 # unity-text-locator
 
-用于 Unity 游戏翻译工作流的 Codex skills 仓库。
+用于 Unity 游戏翻译工作流的 Codex/Claude skills 仓库。
 
 本仓库包含两个 skill：
 
@@ -42,6 +42,22 @@ Unity 扫描/提取
 ```
 
 全自动只自动化“翻译阶段”。Unity 的行对齐、占位符、标签、源文件哈希、dry-run 写回、备份和运行时检查仍然是最终写回前的硬门禁。
+
+## 建议提示词
+
+需要让 Codex 端到端处理一个 Unity 游戏翻译项目时，可以使用下面的提示词，把 `xxx` 替换成游戏工作目录或游戏根目录路径：
+
+```text
+请翻译工作目录里的游戏：xxx。
+
+先使用 skill：unity-text-locator 检查 Unity 游戏结构，定位实际显示文本源，生成按项目命名的一列原文 CSV 和 manifest；如果发现多个文本源，请先报告候选源和推荐适配器。
+
+然后使用 skill：ainiee-translate 进行全自动翻译。第一次进入翻译循环前，先让我选择翻译方式：在当前 agent 内翻译，还是下载/配置本地模型后翻译；除非我明确选择本地模型，不要下载模型。翻译时保留 Unity/TMP 标签、占位符、换行标记和 manifest 行对齐关系。
+
+允许使用子代理加速翻译；子代理只能读取分配给自己的源文本并产出译文 JSON，不能写 cache.json、不能写 Unity 资源、不能改 manifest。由主 agent 串行写回 cache，并做统一校验。
+
+最后把翻译结果转回 *_translation.csv，运行 CSV 结构校验和 dry-run 写回预检；只有校验通过后再写回 Unity 资源。写回前要备份，写回后做运行时/残留检查，并报告生成的 CSV、manifest、校验结果、写回数量、跳过行、备份路径和仍未覆盖的文本源。
+```
 
 ## 字体资产
 
