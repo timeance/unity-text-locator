@@ -66,9 +66,11 @@ def main(argv=None):
         applied = write_back(a.cache_path, translations)
         if applied < total:
             print(f"applied {applied} of {total} translation(s) ({total - applied} unmatched)")
+            return 1
         else:
             print(f"applied {applied} translation(s)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

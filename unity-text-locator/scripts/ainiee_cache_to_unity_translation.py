@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import os
 import sys
 from pathlib import Path
@@ -31,13 +32,22 @@ def add_ainiee_path(path: Path) -> None:
     sys.path.insert(0, str(path))
 
 
-def read_source_count(path: Path) -> int:
+def read_source_rows(path: Path) -> list[str]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         fields = [field.lstrip("\ufeff") for field in (reader.fieldnames or [])]
         if fields != ["original_flat"]:
             raise SystemExit(f"{path} must contain exactly one original_flat column")
-        return sum(1 for _ in reader)
+        return [row.get("original_flat", "") for row in reader]
+
+
+def source_rows_sha256(rows: list[str]) -> str:
+    digest = hashlib.sha256()
+    for row in rows:
+        encoded = row.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
 
 
 def main() -> int:
@@ -49,6 +59,11 @@ def main() -> int:
         type=Path,
         default=None,
         help="Optional Unity source CSV used to enforce output row count and order.",
+    )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Allow missing, untranslated, or blank rows; unsafe for final writeback.",
     )
     parser.add_argument(
         "--ainiee-scripts",
@@ -63,16 +78,47 @@ def main() -> int:
     from ainiee_translate import cache_io
 
     project = cache_io.load_cache(str(args.cache))
-    by_index = {
-        int(item.text_index): (item.translated_text or "")
-        for item in cache_io.iter_items(project)
-    }
+    items = list(cache_io.iter_items(project))
+    indexes = [int(item.text_index) for item in items]
+    if any(index <= 0 for index in indexes) or len(indexes) != len(set(indexes)):
+        raise SystemExit("cache contains invalid or duplicate text_index values")
+    by_index = {int(item.text_index): item for item in items}
 
     if args.source_csv:
-        row_count = read_source_count(args.source_csv)
-        values = [by_index.get(index, "") for index in range(1, row_count + 1)]
+        source_rows = read_source_rows(args.source_csv)
+        row_count = len(source_rows)
+        expected_hash = (project.extra or {}).get("source_rows_sha256")
+        actual_hash = source_rows_sha256(source_rows)
+        if not expected_hash:
+            raise SystemExit("cache has no source_rows_sha256; recreate it from the Unity source CSV")
+        if expected_hash != actual_hash:
+            raise SystemExit("source CSV content hash does not match the cache")
+        source_mismatches = [
+            index for index, source in enumerate(source_rows, start=1)
+            if index in by_index and (by_index[index].source_text or "") != source
+        ]
+        if source_mismatches:
+            raise SystemExit(f"cache source text differs at {len(source_mismatches)} row(s)")
     else:
-        values = [by_index[index] for index in sorted(by_index)]
+        row_count = max(indexes, default=0)
+
+    expected_indexes = set(range(1, row_count + 1))
+    missing = sorted(expected_indexes - set(by_index))
+    extra = sorted(set(by_index) - expected_indexes)
+    incomplete = []
+    values = []
+    for index in range(1, row_count + 1):
+        item = by_index.get(index)
+        value = (item.translated_text or "") if item else ""
+        if item is None or item.translation_status not in (1, 2) or not value.strip():
+            incomplete.append(index)
+        values.append(value)
+    if (missing or extra or incomplete) and not args.allow_partial:
+        raise SystemExit(
+            "cache is incomplete: "
+            f"{len(missing)} missing, {len(extra)} out-of-range, "
+            f"{len(incomplete)} untranslated/blank row(s); use --allow-partial only for review"
+        )
 
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.out_csv.open("w", encoding="utf-8-sig", newline="") as handle:

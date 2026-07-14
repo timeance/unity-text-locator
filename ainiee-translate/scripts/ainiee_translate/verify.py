@@ -72,7 +72,8 @@ def main(argv=None):
     issues = check_items(_items_for_check(a.cache), locked)
     print(json.dumps(issues, ensure_ascii=False, indent=2))
     print(f"\n{len(issues)} issue(s)")
+    return 1 if issues else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

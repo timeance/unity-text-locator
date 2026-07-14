@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -79,6 +80,20 @@ def installed_runtime_font_files() -> list[str]:
                 found.append(normalized)
                 seen.add(normalized)
     return found
+
+
+def sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def runtime_font_destination(data_dir: Path, source: Path) -> Path:
+    if not source.is_file():
+        raise SystemExit(f"Runtime font file not found: {source}")
+    if source.stat().st_size == 0:
+        raise SystemExit("--runtime-font-file must not be empty")
+    if source.suffix.lower() not in {".ttf", ".otf", ".ttc"}:
+        raise SystemExit("--runtime-font-file must be a .ttf, .otf, or .ttc font")
+    return data_dir / "ChineseFontFixer" / "Fonts" / source.name
 
 
 def compile_dll(skill_dir: Path, managed: Path, csc: Path, output_dll: Path) -> None:
@@ -210,6 +225,7 @@ def commit_outputs(outputs: dict[Path, bytes], root: Path, backup_root: Path) ->
             shutil.copy2(path, backup_path(path, root, backup_root))
     try:
         for path, payload in outputs.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_name(path.name + ".ChineseFontFixer.tmp")
             temporary.write_bytes(payload)
             try:
@@ -241,6 +257,12 @@ def main() -> int:
     parser.add_argument("game_root", type=Path)
     parser.add_argument("--font", default="Microsoft YaHei", choices=sorted(FONT_CHOICES))
     parser.add_argument("--font-file", type=Path, default=None)
+    parser.add_argument(
+        "--runtime-font-file",
+        type=Path,
+        default=None,
+        help="Copy a legally obtained TTF/OTF/TTC into the game-private runtime fallback directory",
+    )
     parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--font-name-pattern", action="append", default=None, help="Embedded Font asset name substring to replace")
     parser.add_argument("--patch-embedded-fonts", action="store_true", help="Also replace matching embedded legacy Font assets")
@@ -261,6 +283,18 @@ def main() -> int:
         raise SystemExit("--font and --font-file select embedded replacement data only; use them with --patch-embedded-fonts")
 
     outputs: dict[Path, bytes] = dict(json_outputs)
+    runtime_font: dict | None = None
+    if args.runtime_font_file:
+        runtime_source = args.runtime_font_file.resolve()
+        runtime_payload = runtime_source.read_bytes() if runtime_source.is_file() else b""
+        runtime_target = runtime_font_destination(data_dir, runtime_source)
+        outputs[runtime_target] = runtime_payload
+        runtime_font = {
+            "source": str(runtime_source),
+            "target": runtime_target.relative_to(root).as_posix(),
+            "size": len(runtime_payload),
+            "sha256": sha256_bytes(runtime_payload),
+        }
     patched_fonts: list[dict] = []
     selected_font = args.font
     selected_font_file: str | None = None
@@ -298,6 +332,7 @@ def main() -> int:
         "assembly_type": assembly_type,
         "runtime_fallback_fonts": list(FONT_CHOICES),
         "runtime_fallback_font_files_found": installed_runtime_font_files(),
+        "runtime_font_file": runtime_font,
         "patch_embedded_fonts": args.patch_embedded_fonts,
         "embedded_font_name": selected_font if args.patch_embedded_fonts else None,
         "embedded_font_file": selected_font_file,

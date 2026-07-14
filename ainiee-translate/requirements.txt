@@ -1,10 +1,10 @@
 # Runtime dependencies for ainiee-translate.
 # Keep this in sync with upstream pyproject.toml dependencies.
-msgspec
-beautifulsoup4
-lxml
-rich
-openpyxl
-polib
-python-pptx
-chardet
+msgspec>=0.18,<1
+beautifulsoup4>=4.12,<5
+lxml>=4.9,<7
+rich>=13,<15
+openpyxl>=3.1,<4
+polib>=1.2,<2
+python-pptx>=1.0,<2
+chardet>=5,<6

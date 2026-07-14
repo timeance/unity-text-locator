@@ -2,15 +2,17 @@
 ainiee-cache-fix skill (apostrophe normalization + Latin-only boundaries)."""
 import re
 import shutil
-import time
+from datetime import datetime, timezone
+from uuid import uuid4
 
 _APOS = {"'": "'", "ʼ": "'", "＇": "'", "’": "'"}
 _CJK = re.compile(r"[一-鿿]")
 
 
 def backup_file(path: str) -> str:
-    """Timestamped copy alongside the original: path.bak.YYYYMMDD_HHMMSS."""
-    dst = f"{path}.bak.{time.strftime('%Y%m%d_%H%M%S')}"
+    """Create a collision-resistant backup alongside *path*."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%fZ")
+    dst = f"{path}.bak.{stamp}.{uuid4().hex[:8]}"
     shutil.copy2(path, dst)
     return dst
 

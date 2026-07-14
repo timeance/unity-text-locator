@@ -462,7 +462,7 @@ def extract_records(
     }
 
 
-def write_outputs(result: dict[str, object], out_dir: Path) -> None:
+def write_outputs(result: dict[str, object], out_dir: Path, include_raw_candidates: bool = False) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     unique_texts = result["unique_texts"]
     occurrences = result["occurrences"]
@@ -478,7 +478,7 @@ def write_outputs(result: dict[str, object], out_dir: Path) -> None:
 
     manifest_path = out_dir / "extraction_manifest.json"
     manifest_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_source_text_outputs(result, out_dir / "text")
+    write_source_text_outputs(result, out_dir / "text", include_raw_candidates=include_raw_candidates)
 
     category_counts = Counter(str(row["category"]) for row in occurrences if isinstance(row, dict))
     method_counts = Counter(str(row["method"]) for row in occurrences if isinstance(row, dict))
@@ -512,7 +512,11 @@ def write_outputs(result: dict[str, object], out_dir: Path) -> None:
     (out_dir / "extraction-summary.md").write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_source_text_outputs(result: dict[str, object], text_dir: Path) -> None:
+def write_source_text_outputs(
+    result: dict[str, object],
+    text_dir: Path,
+    include_raw_candidates: bool = False,
+) -> None:
     occurrences = result["occurrences"]
     files_scanned = result["files_scanned"]
     assert isinstance(occurrences, list)
@@ -523,9 +527,22 @@ def write_source_text_outputs(result: dict[str, object], text_dir: Path) -> None
         if isinstance(row, dict) and "path" in row
     }
     by_source: dict[str, list[dict[str, object]]] = defaultdict(list)
+    raw_audit: list[dict[str, object]] = []
     for occurrence in occurrences:
-        if isinstance(occurrence, dict):
-            by_source[str(occurrence["source_file"])].append(occurrence)
+        if not isinstance(occurrence, dict):
+            continue
+        if occurrence.get("method") == "raw-utf8-fallback" and not include_raw_candidates:
+            raw_audit.append(occurrence)
+            continue
+        by_source[str(occurrence["source_file"])].append(occurrence)
+    if raw_audit:
+        text_dir.mkdir(parents=True, exist_ok=True)
+        audit_path = text_dir / "raw_utf8_candidates_audit.csv"
+        with audit_path.open("w", encoding="utf-8-sig", newline="") as handle:
+            fields = ["source_file", "offset_hex", "byte_length", "confidence", "original_flat", "notes"]
+            writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(raw_audit)
     if not by_source:
         return
 
@@ -582,10 +599,11 @@ def extract_to_outputs(
     out_dir: Path,
     max_file_mb: int = DEFAULT_MAX_FILE_MB,
     include_managed: bool = False,
+    include_raw_candidates: bool = False,
     ignored_dirs: set[str] | None = None,
 ) -> dict[str, object]:
     result = extract_records(root, max_file_mb=max_file_mb, include_managed=include_managed, ignored_dirs=ignored_dirs)
-    write_outputs(result, out_dir)
+    write_outputs(result, out_dir, include_raw_candidates=include_raw_candidates)
     return result
 
 
@@ -595,6 +613,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--out", default=None, help="Output report directory (default: <root>/_translation/unity-text-report)")
     parser.add_argument("--max-file-mb", type=int, default=DEFAULT_MAX_FILE_MB, help="Maximum file size to scan")
     parser.add_argument("--include-managed", action="store_true", help="Also extract strings from Managed/Assembly-CSharp.dll")
+    parser.add_argument(
+        "--include-raw-candidates",
+        action="store_true",
+        help="Expose raw UTF-8 fallback rows to translators; otherwise keep them audit-only",
+    )
     parser.add_argument("--ignore-dir", action="append", default=[], help="Directory name to skip; can be repeated")
     return parser.parse_args(argv)
 
@@ -615,6 +638,7 @@ def main(argv: list[str]) -> int:
         out_dir=out_dir,
         max_file_mb=args.max_file_mb,
         include_managed=args.include_managed,
+        include_raw_candidates=args.include_raw_candidates,
         ignored_dirs=ignored_dirs,
     )
     print(f"Wrote {out_dir / 'extracted_text.csv'}")

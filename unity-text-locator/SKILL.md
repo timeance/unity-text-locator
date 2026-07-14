@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to inspect an unknown Unity game's text layout, extract project-named one-column text CSVs, accept matching one-column *_translation.csv files, validate and selectively apply safe rows, write approved rows back into Unity assets/Utage/BansheeGz BGDatabase/raw MonoBehaviour records, inspect TMP font-bundle identity/version/glyph coverage, diagnose tofu versus atlas corruption, validate Addressables or IL2CPP candidates, locate ES3 saves, or build verified binary-diff patch packages.
+description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, extract occurrence-mapped one-column CSVs, bridge them through AiNiee-style translation, validate and transactionally write approved rows into serialized assets or verified middleware adapters, audit raw strings, diagnose TMP fonts, install a licensed app-local Noto fallback for supported Mono builds, inspect Addressables/IL2CPP risks, locate saves, or build SHA-verified patch packages.
 ---
 
 # Unity Translation Workflow
@@ -23,6 +23,8 @@ Use three gates for every project:
 - Discovery gate: report Unity version/layout, Mono versus IL2CPP, Addressables, middleware clues, and all candidate text sources before choosing an adapter.
 - Translator gate: expose only project-named one-column CSVs for row-mapped sources; keep broad `extracted_text.csv` as audit evidence, not as a writeback source.
 - Runtime gate: a clean CSV validation and a tool-level dry run are not enough for runtime-sensitive containers; prove the edited file loads through the same game path before distributing it.
+
+Keep `raw-utf8-fallback` audit-only by default. Expose it with `--include-raw-candidates` and write it with `--allow-raw-fallback` only after an adapter-specific container review. Normal writes must complete in staging, pass exact object/file validation, and commit with automatic rollback.
 
 Read [references/unity-text-map.md](references/unity-text-map.md) when locating candidate Unity text containers or middleware clues.
 Read [references/runtime-sensitive-adapters.md](references/runtime-sensitive-adapters.md) when handling BansheeGz databases, Addressables bundles/catalogs, ES3 saves, or runtime font compatibility.
@@ -181,6 +183,8 @@ Use the sibling `ainiee-translate` skill to run the batch translation loop on th
   --out-csv "GameFolder/_translation/unity-text-report/text/GameTitle_text_translation.csv"
 ```
 
+This conversion is fail-closed: it verifies the source CSV fingerprint and rejects missing, duplicate, untranslated, or blank rows. `--allow-partial` is only for generating a review artifact and must not feed final writeback.
+
 Then run `validate_translation_csv.py` exactly as in the semi-automatic path.
 
 When the user explicitly chooses to apply only structurally safe rows, filter row-addressable failures and then validate the filtered output again:
@@ -283,11 +287,12 @@ For compatible Mono/TMP games with `ScriptingAssemblies.json` and `RuntimeInitia
 
 ```bash
 python scripts/install_tmp_chinese_font_fix.py "GameFolder" \
+  --runtime-font-file "path/to/licensed/NotoSansCJKsc-Regular.otf" \
   --out-dir "GameFolder/_translation/unity-text-report/font-fix" \
   --dry-run
 ```
 
-The fixer compiles the DLL and validates injection files during preflight, then applies all planned writes with backups only when run without `--dry-run`. Its default runtime behavior chooses an installed CJK font file, adds a dynamic TMP fallback, and changes legacy UI fonts only for strings with missing CJK glyphs; it does not replace every TMP font. Use `--patch-embedded-fonts --font "Microsoft YaHei"` only when a reviewed embedded legacy `Font` replacement is needed.
+The fixer compiles the DLL and validates injection files during preflight, then applies the DLL, JSON, and app-local runtime font as one rollback-capable change set. Prefer a legally redistributable Noto CJK/SC font; never publish `arialuni_sdf_u2019` without explicit redistribution rights. When no runtime font is supplied, the fixer may fall back to installed system CJK fonts. Use embedded replacement only after exact Unity/TMP compatibility review.
 
 After installation, launch the game and inspect `Player.log`. Require an initialization log and no `MissingMethodException`, `Unable to load font face`, or repeated missing-glyph failures. Some stripped Mono builds omit `Font.CreateDynamicFontFromOSFont` or `ParameterInfo.HasDefaultValue`; use the shipped file-path/reflection-compatible fixer rather than assuming those APIs exist. If the game directory permits content writes but rejects rename replacement, keep the backup, accept verified copy-overwrite only, and remove or report staged `.tmp` files.
 

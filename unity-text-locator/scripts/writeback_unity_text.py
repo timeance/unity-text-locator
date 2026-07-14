@@ -7,12 +7,15 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
 import struct
+import tempfile
+import uuid
 from collections import Counter, defaultdict
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 PLACEHOLDER_RE = re.compile(r"(<[^>]+>|\\[nrt]|\{[^{}]+\}|%[sdif]|\$[A-Za-z0-9_]+|\[[A-Za-z0-9_:-]+\])")
@@ -164,13 +167,111 @@ def backup(path: Path, root: Path, backup_root: Path, backed_up: set[str]) -> No
     backed_up.add(relative)
 
 
+def resolve_under_root(root: Path, relative: str) -> Path:
+    """Resolve an existing manifest path without allowing it to escape root."""
+    normalized = PurePosixPath(relative.replace("\\", "/"))
+    windows = PureWindowsPath(relative)
+    if (
+        not relative
+        or normalized.is_absolute()
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or not normalized.parts
+        or ".." in normalized.parts
+    ):
+        raise SystemExit(f"unsafe source path in manifest: {relative}")
+    value = Path(*normalized.parts)
+    resolved_root = root.resolve()
+    resolved = (resolved_root / value).resolve()
+    try:
+        resolved.relative_to(resolved_root)
+    except ValueError as exc:
+        raise SystemExit(f"source path escapes game root: {relative}") from exc
+    return resolved
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def selected_source_files(selected: list[dict]) -> list[str]:
+    return sorted({str(item["source_file"]) for item in selected})
+
+
+def stage_source_files(real_root: Path, stage_root: Path, relatives: list[str]) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for relative in relatives:
+        source = resolve_under_root(real_root, relative)
+        if not source.is_file():
+            raise SystemExit(f"source file missing: {relative}")
+        destination = resolve_under_root(stage_root, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        hashes[relative] = file_sha256(source)
+    return hashes
+
+
+def atomic_copy(source: Path, target: Path) -> None:
+    temporary = target.with_name(f"{target.name}.writeback-{uuid.uuid4().hex}.tmp")
+    try:
+        shutil.copy2(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def commit_staged_files(
+    real_root: Path,
+    stage_root: Path,
+    relatives: list[str],
+    expected_hashes: dict[str, str],
+    backup_root: Path,
+) -> list[str]:
+    """Commit validated staged files and roll back every earlier write on failure."""
+    targets: dict[str, Path] = {}
+    for relative in relatives:
+        target = resolve_under_root(real_root, relative)
+        if file_sha256(target) != expected_hashes[relative]:
+            raise RuntimeError(f"source changed while writeback was staged: {relative}")
+        staged = resolve_under_root(stage_root, relative)
+        if not staged.is_file():
+            raise RuntimeError(f"staged output missing: {relative}")
+        targets[relative] = target
+
+    for relative, target in targets.items():
+        backup_path = backup_root / Path(relative)
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target, backup_path)
+
+    written: list[str] = []
+    try:
+        for relative, target in targets.items():
+            atomic_copy(resolve_under_root(stage_root, relative), target)
+            written.append(relative)
+    except Exception:
+        rollback_failures: list[str] = []
+        for relative in reversed(written):
+            try:
+                atomic_copy(backup_root / Path(relative), targets[relative])
+            except Exception:
+                rollback_failures.append(relative)
+        if rollback_failures:
+            raise RuntimeError(f"writeback failed and rollback also failed: {rollback_failures}")
+        raise
+    return written
+
+
 def verify_source_hash(manifest: dict, selected: list[dict]) -> None:
     expected = manifest.get("source_sha256")
     source_file = manifest.get("source_file")
     if not expected or not source_file or not selected:
         return
-    path = Path(manifest["root"]) / Path(str(source_file))
-    current = hashlib.sha256(path.read_bytes()).hexdigest()
+    path = resolve_under_root(Path(manifest["root"]), str(source_file))
+    current = file_sha256(path)
     if current != expected:
         raise SystemExit(f"source file SHA256 changed since extraction: {source_file}")
 
@@ -182,7 +283,13 @@ def find_object(objects, offset: int):
     return None
 
 
-def patch_len_prefixed(manifest: dict, selected: list[dict], backup_root: Path, dry_run: bool) -> tuple[list[dict], list[dict], set[str]]:
+def patch_len_prefixed(
+    manifest: dict,
+    selected: list[dict],
+    backup_root: Path,
+    dry_run: bool,
+    backed_up: set[str] | None = None,
+) -> tuple[list[dict], list[dict], set[str]]:
     root = Path(manifest["root"])
     by_file: dict[str, list[dict]] = defaultdict(list)
     for occurrence in selected:
@@ -197,9 +304,10 @@ def patch_len_prefixed(manifest: dict, selected: list[dict], backup_root: Path, 
 
     patched: list[dict] = []
     skipped: list[dict] = []
-    backed_up: set[str] = set()
+    if backed_up is None:
+        backed_up = set()
     for relative, occurrences in sorted(by_file.items()):
-        path = root / Path(relative)
+        path = resolve_under_root(root, relative)
         if not path.exists():
             skipped.extend({"row": item["_row"], "source_file": relative, "reason": "file missing"} for item in occurrences)
             continue
@@ -244,7 +352,15 @@ def patch_len_prefixed(manifest: dict, selected: list[dict], backup_root: Path, 
                 delta += len(segment) - (pad_end - relative_offset)
                 object_changed = True
                 file_changed = True
-                patched.append({"row": occurrence["_row"], "source_file": relative, "method": "unity-len-utf8", "written_text": new_text})
+                patched.append(
+                    {
+                        "row": occurrence["_row"],
+                        "source_file": relative,
+                        "method": "unity-len-utf8",
+                        "written_text": new_text,
+                        "path_id": int(obj.path_id),
+                    }
+                )
             if object_changed and not dry_run:
                 obj.set_raw_data(bytes(raw))
         if file_changed and not dry_run:
@@ -262,7 +378,7 @@ def patch_raw(manifest: dict, selected: list[dict], backup_root: Path, backed_up
     patched: list[dict] = []
     skipped: list[dict] = []
     for relative, occurrences in sorted(by_file.items()):
-        path = root / Path(relative)
+        path = resolve_under_root(root, relative)
         if not path.exists():
             skipped.extend({"row": item["_row"], "source_file": relative, "reason": "file missing"} for item in occurrences)
             continue
@@ -300,42 +416,123 @@ def patch_raw(manifest: dict, selected: list[dict], backup_root: Path, backed_up
 
 
 def validate_written(root: Path, patched: list[dict]) -> list[dict]:
-    expected: dict[str, Counter[str]] = defaultdict(Counter)
+    expected_raw: dict[str, Counter[str]] = defaultdict(Counter)
+    expected_objects: dict[str, dict[int, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
     for item in patched:
-        expected[str(item["source_file"])][str(item["written_text"])] += 1
+        relative = str(item["source_file"])
+        text = str(item["written_text"])
+        if item.get("method") == "unity-len-utf8" and "path_id" in item:
+            expected_objects[relative][int(item["path_id"])][text] += 1
+        else:
+            expected_raw[relative][text] += 1
     failures: list[dict] = []
-    for relative, counter in expected.items():
-        data = (root / Path(relative)).read_bytes()
+    for relative, counter in expected_raw.items():
+        data = resolve_under_root(root, relative).read_bytes()
         for text, count in counter.items():
             found = data.count(text.encode("utf-8"))
             if found < count:
                 failures.append({"source_file": relative, "expected": flat(text), "expected_count": count, "found_count": found})
+    if expected_objects:
+        try:
+            import UnityPy  # type: ignore
+        except ImportError as exc:
+            raise SystemExit("UnityPy is required for exact staged writeback validation") from exc
+        for relative, by_path_id in expected_objects.items():
+            env = UnityPy.load(str(resolve_under_root(root, relative)))
+            objects = {int(obj.path_id): obj for obj in env.objects}
+            for path_id, counter in by_path_id.items():
+                obj = objects.get(path_id)
+                if obj is None:
+                    failures.append({"source_file": relative, "path_id": path_id, "reason": "saved object missing"})
+                    continue
+                raw = obj.get_raw_data()
+                for text, count in counter.items():
+                    found = raw.count(text.encode("utf-8"))
+                    if found < count:
+                        failures.append(
+                            {
+                                "source_file": relative,
+                                "path_id": path_id,
+                                "expected": flat(text),
+                                "expected_count": count,
+                                "found_count": found,
+                            }
+                        )
     return failures
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument(
+        "--game-root",
+        type=Path,
+        default=None,
+        help="Rebase a relocated manifest to this game root; source hashes are still required",
+    )
     parser.add_argument("--source-csv", required=True, type=Path)
     parser.add_argument("--translation-csv", required=True, type=Path)
     parser.add_argument("--out-dir", required=True, type=Path)
     parser.add_argument("--backup-dir", type=Path, default=None)
     parser.add_argument("--allow-newline-changes", action="store_true")
+    parser.add_argument(
+        "--allow-raw-fallback",
+        action="store_true",
+        help="Allow risky fixed-span raw UTF-8 writes after container-specific review",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    if args.game_root:
+        manifest["root"] = str(args.game_root.resolve())
     args.out_dir.mkdir(parents=True, exist_ok=True)
     selected, writeback_csv, translation_rows_used = prepare_plan(
         manifest, args.source_csv, args.translation_csv, args.out_dir, args.allow_newline_changes
     )
     verify_source_hash(manifest, selected)
-    backup_root = args.backup_dir or (args.out_dir / "backups" / datetime.now().strftime("%Y%m%d-%H%M%S"))
-    len_patched, len_skipped, backed_up = patch_len_prefixed(manifest, selected, backup_root, args.dry_run)
-    raw_patched, raw_skipped = patch_raw(manifest, selected, backup_root, backed_up, args.dry_run)
-    patched = len_patched + raw_patched
-    skipped = len_skipped + raw_skipped
-    validation_failures = [] if args.dry_run else validate_written(Path(manifest["root"]), patched)
+    raw_selected = [item for item in selected if item.get("method") == "raw-utf8-fallback"]
+    if raw_selected and not args.allow_raw_fallback:
+        rows = sorted({int(item["_row"]) for item in raw_selected})
+        raise SystemExit(
+            "raw-utf8-fallback rows are audit-only by default; review the container and rerun "
+            f"with --allow-raw-fallback to approve rows {rows[:20]}"
+        )
+
+    real_root = Path(manifest["root"]).resolve()
+    relatives = selected_source_files(selected)
+    backup_root = args.backup_dir or (
+        args.out_dir / "backups" / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    )
+    files_written: list[str] = []
+    if args.dry_run or not relatives:
+        backed_up: set[str] = set()
+        raw_patched, raw_skipped = patch_raw(manifest, selected, backup_root, backed_up, True)
+        len_patched, len_skipped, _ = patch_len_prefixed(manifest, selected, backup_root, True, backed_up)
+        patched = raw_patched + len_patched
+        skipped = raw_skipped + len_skipped
+        validation_failures: list[dict] = []
+    else:
+        with tempfile.TemporaryDirectory(prefix=".writeback-stage-", dir=args.out_dir) as temporary:
+            stage_root = Path(temporary) / "game-root"
+            stage_root.mkdir(parents=True)
+            expected_hashes = stage_source_files(real_root, stage_root, relatives)
+            staged_manifest = dict(manifest)
+            staged_manifest["root"] = str(stage_root)
+            stage_backups = Path(temporary) / "internal-backups"
+            backed_up = set()
+            # Raw offsets are byte-stable; apply them before UnityPy serializes objects.
+            raw_patched, raw_skipped = patch_raw(staged_manifest, selected, stage_backups, backed_up, False)
+            len_patched, len_skipped, _ = patch_len_prefixed(
+                staged_manifest, selected, stage_backups, False, backed_up
+            )
+            patched = raw_patched + len_patched
+            skipped = raw_skipped + len_skipped
+            validation_failures = validate_written(stage_root, patched)
+            if not skipped and not validation_failures:
+                files_written = commit_staged_files(
+                    real_root, stage_root, relatives, expected_hashes, backup_root
+                )
     result = {
         "dry_run": args.dry_run,
         "game_root": manifest.get("root"),
@@ -347,7 +544,7 @@ def main() -> int:
         "patched_total": len(patched),
         "skipped": skipped,
         "validation_failures": validation_failures,
-        "files_written": sorted(backed_up),
+        "files_written": files_written,
     }
     (args.out_dir / "writeback_report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, indent=2))

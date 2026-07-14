@@ -42,6 +42,7 @@ TEXT_EXTS = {
 
 UNITY_ASSET_EXTS = {".assets", ".resS", ".resource"}
 BUNDLE_EXTS = {".bundle", ".unity3d", ".ab", ".assetbundle"}
+UNITY_VERSION_RE = re.compile(rb"(?<![0-9])((?:20\d{2}|[3-9]\d{0,3})\.\d+\.\d+[abcfpx]\d+)(?![0-9])")
 CODE_EXTS = {".dll", ".exe", ".pdb"}
 ARCHIVE_EXTS = {".zip", ".rar", ".7z", ".gz", ".lz4", ".dat", ".bin"}
 
@@ -271,6 +272,31 @@ def detect_backend(root: Path, data_dirs: list[Path]) -> dict[str, object]:
     }
 
 
+def detect_unity_versions(root: Path, data_dirs: list[Path]) -> dict[str, object]:
+    """Collect version strings from bounded Unity metadata headers."""
+    evidence: dict[str, set[str]] = {}
+    candidates: list[Path] = []
+    for data_dir in data_dirs or [root]:
+        candidates.extend(data_dir / name for name in ("globalgamemanagers", "resources.assets"))
+        candidates.extend(sorted(data_dir.glob("sharedassets*.assets"))[:4])
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            with path.open("rb") as handle:
+                head = handle.read(4 * 1024 * 1024)
+        except OSError:
+            continue
+        versions = {match.group(1).decode("ascii") for match in UNITY_VERSION_RE.finditer(head)}
+        for version in versions:
+            evidence.setdefault(version, set()).add(rel(path, root))
+    return {
+        "unity_versions": sorted(evidence),
+        "unity_version_evidence": {version: sorted(paths) for version, paths in sorted(evidence.items())},
+        "unity_version_status": "detected" if evidence else "unknown",
+    }
+
+
 def detect_unity_markers(root: Path) -> dict[str, object]:
     data_dirs = find_data_dirs(root)
     markers: list[str] = []
@@ -291,6 +317,7 @@ def detect_unity_markers(root: Path) -> dict[str, object]:
         "data_dirs": [rel(p, root) for p in data_dirs],
         "exe_candidates": exe_candidates,
         "unity_markers": sorted(set(markers)),
+        **detect_unity_versions(root, data_dirs),
         **detect_backend(root, data_dirs),
     }
 
@@ -400,6 +427,7 @@ def write_report(result: dict[str, object], out_dir: Path) -> None:
     lines.append(f"- Root: `{metadata.get('root')}`")
     lines.append(f"- Data dirs: {', '.join(f'`{p}`' for p in metadata.get('data_dirs', [])) or 'none detected'}")
     lines.append(f"- Backend: `{metadata.get('backend')}`")
+    lines.append(f"- Unity versions: `{', '.join(metadata.get('unity_versions', [])) or 'unknown'}`")
     lines.append(f"- Scanned files: {stats.get('scanned_files')}")
     lines.append(f"- Findings: {stats.get('findings')}")
     lines.append("")
