@@ -91,9 +91,10 @@ class WritebackTransactionTests(unittest.TestCase):
                 expected[relative] = writeback.file_sha256(target)
 
             real_atomic_copy = writeback.atomic_copy
+            second_staged = (stage_root / "b.assets").resolve()
 
             def fail_second_staged_copy(source: Path, target: Path) -> None:
-                if source == stage_root / "b.assets":
+                if source.resolve() == second_staged:
                     raise OSError("simulated commit failure")
                 real_atomic_copy(source, target)
 
