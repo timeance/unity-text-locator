@@ -1,0 +1,2 @@
+# Unity asset inspection and serialized-file writeback.
+UnityPy>=1.25,<2

@@ -1,5 +1,13 @@
 # Unity Text Location Map
 
+## Contents
+
+- Common locations and middleware clues
+- Discovery order and tool choice
+- Per-source CSV/manifest contract
+- Safe writeback and validation
+- Font fallback and completion evidence
+
 ## Common Locations
 
 | Location | What it may contain | First action |

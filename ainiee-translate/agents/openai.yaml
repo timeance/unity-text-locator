@@ -1,0 +1,4 @@
+interface:
+  display_name: "AiNiee Agent Translation"
+  short_description: "Translate books and Unity text caches safely."
+  default_prompt: "Use $ainiee-translate to translate this book or Unity localization cache with a locked glossary, resumable batches, validation, and safe export."

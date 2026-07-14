@@ -9,7 +9,7 @@ import hashlib
 import json
 import shutil
 import zipfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 def sha256(data: bytes) -> str:
@@ -17,10 +17,30 @@ def sha256(data: bytes) -> str:
 
 
 def checked_relative(value: str) -> Path:
+    if not value or "\x00" in value:
+        raise SystemExit(f"Unsafe relative patch path: {value}")
     normalized = PurePosixPath(value.replace("\\", "/"))
-    if normalized.is_absolute() or ".." in normalized.parts:
+    windows = PureWindowsPath(value)
+    if (
+        normalized.is_absolute()
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or ".." in normalized.parts
+        or not normalized.parts
+    ):
         raise SystemExit(f"Unsafe relative patch path: {value}")
     return Path(*normalized.parts)
+
+
+def contained_path(root: Path, relative: Path, *, must_exist: bool = True) -> Path:
+    """Resolve a user path and require it to stay below root, including links."""
+    root = root.resolve()
+    candidate = (root / relative).resolve(strict=must_exist)
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise SystemExit(f"Patch path escapes its root: {relative.as_posix()}") from None
+    return candidate
 
 
 def split_middle(original: bytes, translated: bytes) -> tuple[int, int, bytes]:
@@ -53,8 +73,8 @@ def main() -> int:
     entries: list[dict[str, object]] = []
     for requested in args.files:
         relative = checked_relative(requested)
-        original_path = backup_root / relative
-        translated_path = game_root / relative
+        original_path = contained_path(backup_root, relative, must_exist=False)
+        translated_path = contained_path(game_root, relative, must_exist=False)
         if not original_path.exists() or not translated_path.exists():
             raise SystemExit(f"Patch source missing for {relative.as_posix()}")
         original = original_path.read_bytes()

@@ -1,6 +1,6 @@
 ---
 name: ainiee-translate
-description: Use when the user wants to translate a novel/epub end-to-end on the coding agent itself (Claude Code or Codex; no AiNiee app), AiNiee-style — parse, build a locked glossary, translate chapter by chapter following rules (names preserved, title 3-way, term consistency), write back and export. Triggers on "用 agent 翻译这本书", "agent 版 aniee 翻译", "把这本 epub 翻译了" and similar.
+description: Translate books, documents, AiNiee projects, or Unity localization caches end-to-end on the coding agent itself without the AiNiee app. Use for requests such as "用 agent 翻译这本书", "把 epub 翻译了", "翻译 Unity CSV/cache", or "AiNiee-style translation" that need a locked glossary, resumable batches, terminology consistency, validated cache writeback, and export.
 ---
 
 # ainiee-translate 技能指南
@@ -17,6 +17,8 @@ parse → 构建锁定词汇表 → 逐章翻译（agent 按规则） → 写回
 - **不限于中译**：支持任意源语言 → 目标语言（`{source_language}` 解析时自动检测、`{target_language}` 由用户指定）；本指南以中文为例，其他目标语言同理。
 - 进度状态驱动（`translation_status`）：中断后重跑自动从首个未译段继续，天然可恢复。
 - 每批写回前自动备份（时间戳）：`cache.json.bak.YYYYMMDD_HHMMSS`。
+
+完整性门禁：写回前要求 `text_index` 唯一，写入使用锁和原子替换；批次存在 unmatched、验证存在 issue、或 Unity cache 缺行/状态未完成时默认退出非零。只有用户明确接受保留未译行时才使用 `--allow-partial`。
 
 本技能自带管道脚本（`scripts/ainiee_translate/`），无需单独 `pip install` 本包；解析/导出模块也随技能打包。跨设备复制后，只需要用本目录的 `requirements.txt` 为运行脚本的 Python 安装依赖。
 

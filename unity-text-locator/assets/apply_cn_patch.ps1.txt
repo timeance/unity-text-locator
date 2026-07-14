@@ -7,6 +7,29 @@ $ErrorActionPreference = "Stop"
 $PatchDir = [IO.Path]::GetFullPath($PatchDir)
 $GameRoot = [IO.Path]::GetFullPath($GameRoot)
 
+function Resolve-SafeChildPath([string]$Root, [string]$Relative, [bool]$MustExist = $true) {
+    if ([string]::IsNullOrWhiteSpace($Relative) -or
+        [IO.Path]::IsPathRooted($Relative) -or
+        -not [string]::IsNullOrEmpty([IO.Path]::GetPathRoot($Relative)) -or
+        (($Relative -replace "/", "\" -split "\\") -contains "..")) {
+        throw "Unsafe patch path: $Relative"
+    }
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $candidate = [IO.Path]::GetFullPath((Join-Path $rootFull ($Relative -replace "/", "\")))
+    $prefix = $rootFull + [IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Patch path escapes its root: $Relative"
+    }
+    if ($MustExist) {
+        $resolved = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).ProviderPath
+        if (-not ($resolved -eq $rootFull) -and -not $resolved.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Patch path escapes its root through a link: $Relative"
+        }
+        return $resolved
+    }
+    return $candidate
+}
+
 function Get-ByteHash([byte[]]$Bytes) {
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
@@ -42,13 +65,11 @@ $planned = @()
 $alreadyPatched = @()
 foreach ($entry in $manifest.files) {
     $relative = $entry.path -replace "/", "\"
-    if ([IO.Path]::IsPathRooted($relative) -or (($relative -split "\\") -contains "..")) {
-        throw "Unsafe patch path: $relative"
-    }
-    $target = Join-Path $GameRoot $relative
+    $target = Resolve-SafeChildPath $GameRoot $relative $false
     if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
         throw "Target file missing: $relative"
     }
+    $target = Resolve-SafeChildPath $GameRoot $relative $true
     [byte[]]$current = [IO.File]::ReadAllBytes($target)
     $currentHash = Get-ByteHash $current
     if ($currentHash -eq $entry.new_sha256) {
@@ -58,7 +79,11 @@ foreach ($entry in $manifest.files) {
     if ($currentHash -ne $entry.old_sha256) {
         throw "Target does not match original or translated hash: $relative"
     }
-    [byte[]]$middle = Read-GZipPayload (Join-Path $PatchDir ($entry.payload -replace "/", "\"))
+    $payload = Resolve-SafeChildPath $PatchDir ([string]$entry.payload) $true
+    if (-not (Test-Path -LiteralPath $payload -PathType Leaf)) {
+        throw "Patch payload missing: $($entry.payload)"
+    }
+    [byte[]]$middle = Read-GZipPayload $payload
     $prefix = [int]$entry.prefix_bytes
     $suffix = [int]$entry.suffix_bytes
     [byte[]]$translated = New-Object byte[] ($prefix + $middle.Length + $suffix)

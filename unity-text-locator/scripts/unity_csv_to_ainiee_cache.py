@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import os
 import sys
 from datetime import datetime, timezone
@@ -47,6 +48,15 @@ def read_source_csv(path: Path) -> list[str]:
         return [row.get("original_flat", "") for row in reader]
 
 
+def source_rows_sha256(rows: list[str]) -> str:
+    digest = hashlib.sha256()
+    for row in rows:
+        encoded = row.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Unity source CSV -> AiNiee cache.json")
     parser.add_argument("--source-csv", required=True, type=Path)
@@ -72,13 +82,14 @@ def main() -> int:
     )
 
     rows = read_source_csv(args.source_csv)
+    source_hash = source_rows_sha256(rows)
     project_name = args.project_name or args.source_csv.stem
     cache_file = CacheFile(
         storage_path=args.source_csv.name,
         encoding="utf-8-sig",
         file_project_type=ProjectType.CSV,
         line_ending="\n",
-        extra={"source_format": "unity-one-column-csv"},
+        extra={"source_format": "unity-one-column-csv", "source_rows_sha256": source_hash},
     )
     for index, source_text in enumerate(rows, start=1):
         cache_file.add_item(
@@ -102,7 +113,7 @@ def main() -> int:
         stats_data=CacheProjectStatistics(total_line=len(rows)),
         detected_encoding="utf-8-sig",
         detected_line_ending="\n",
-        extra={"source_format": "unity-one-column-csv"},
+        extra={"source_format": "unity-one-column-csv", "source_rows_sha256": source_hash},
     )
     project.add_file(cache_file)
 

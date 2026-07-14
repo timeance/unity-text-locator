@@ -82,7 +82,7 @@ python unity-text-locator/scripts/validate_translation_csv.py \
 
 ## Guardrails
 
-- Do not let subagents write the same `cache.json` concurrently.
+- Cache writes are atomic and cooperatively locked, but subagents should still produce separate batch JSON files and let one coordinator write `cache.json`.
 - Do not use AiNiee output directly for Unity writeback; always convert to `zh_cn` CSV and run Unity validation.
-- Blank translations remain intentional skips.
-- If the translated cache has fewer rows than the source CSV, conversion emits blank rows for missing indexes and validation/reporting should catch the gap before writeback.
+- Conversion verifies the source CSV content hash, index continuity, translation status, and nonblank output. Any incomplete row fails by default.
+- `--allow-partial` emits blanks only for an explicitly requested review artifact. Do not pass such output to writeback.

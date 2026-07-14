@@ -25,6 +25,9 @@ The detailed vendored notice is kept at:
 Font assets
 -----------
 
-The `arialuni_sdf_u2019` TMP font asset is not committed to this repository.
-If distributed, it should be attached separately as a GitHub Release asset and
-its redistribution terms should be verified separately from this code license.
+No third-party font binary is covered by this repository's AGPL-3.0 license.
+`arialuni_sdf_u2019` must not be committed or published as a Release asset
+unless the distributor has explicit redistribution rights for that derivative.
+Noto-derived release packs may be distributed only with the applicable SIL
+OFL 1.1 license, copyright/source records, modification disclosure, hashes,
+and build metadata described in `docs/release-assets.md`.

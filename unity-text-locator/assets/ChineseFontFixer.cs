@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -40,17 +41,33 @@ public sealed class ChineseFontFixerRuntime : MonoBehaviour
 
     private static string[] BuildFontPaths()
     {
+        List<string> paths = new List<string>();
+        string privateDirectory = Path.Combine(Application.dataPath, "ChineseFontFixer", "Fonts");
+        if (Directory.Exists(privateDirectory))
+        {
+            string[] extensions = { "*.ttf", "*.otf", "*.ttc" };
+            for (int i = 0; i < extensions.Length; i++)
+            {
+                try
+                {
+                    paths.AddRange(Directory.GetFiles(privateDirectory, extensions[i]));
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning("[ChineseFontFixer] App-local font discovery failed: " + ex.Message);
+                }
+            }
+        }
         string directory = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
         if (string.IsNullOrEmpty(directory))
         {
             directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts");
         }
-        string[] paths = new string[FontFileNames.Length];
         for (int i = 0; i < FontFileNames.Length; i++)
         {
-            paths[i] = Path.Combine(directory, FontFileNames[i]);
+            paths.Add(Path.Combine(directory, FontFileNames[i]));
         }
-        return paths;
+        return paths.ToArray();
     }
 
     private IEnumerator Start()
@@ -107,8 +124,11 @@ public sealed class ChineseFontFixerRuntime : MonoBehaviour
             try
             {
                 Font candidate = new Font(FontPaths[i]);
-                if (candidate != null && candidate.HasCharacter('\u4e2d'))
+                // Unity may not populate a newly constructed file-backed Font's
+                // character table until the font engine/TMP asset uses it.
+                if (candidate != null)
                 {
+                    Debug.Log("[ChineseFontFixer] Using font file: " + FontPaths[i]);
                     return candidate;
                 }
             }
@@ -117,7 +137,7 @@ public sealed class ChineseFontFixerRuntime : MonoBehaviour
                 Debug.LogWarning("[ChineseFontFixer] Font path failed: " + FontPaths[i] + " " + ex.Message);
             }
         }
-        Debug.LogWarning("[ChineseFontFixer] No usable CJK system font file found.");
+        Debug.LogWarning("[ChineseFontFixer] No app-local or supported system font file found.");
         return null;
     }
 

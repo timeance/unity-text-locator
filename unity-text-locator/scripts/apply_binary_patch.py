@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 from datetime import datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 def sha256(data: bytes) -> str:
@@ -18,10 +18,30 @@ def sha256(data: bytes) -> str:
 
 
 def checked_relative(value: str) -> Path:
+    if not value or "\x00" in value:
+        raise SystemExit(f"Unsafe patch path in manifest: {value}")
     normalized = PurePosixPath(value.replace("\\", "/"))
-    if normalized.is_absolute() or ".." in normalized.parts:
+    windows = PureWindowsPath(value)
+    if (
+        normalized.is_absolute()
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or ".." in normalized.parts
+        or not normalized.parts
+    ):
         raise SystemExit(f"Unsafe patch path in manifest: {value}")
     return Path(*normalized.parts)
+
+
+def contained_path(root: Path, relative: Path, *, must_exist: bool = True) -> Path:
+    """Resolve a manifest path and require it to stay below root, including links."""
+    root = root.resolve()
+    candidate = (root / relative).resolve(strict=must_exist)
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise SystemExit(f"Patch path escapes its root: {relative.as_posix()}") from None
+    return candidate
 
 
 def main() -> int:
@@ -40,7 +60,7 @@ def main() -> int:
     skipped_current: list[str] = []
     for entry in manifest.get("files", []):
         relative = checked_relative(str(entry["path"]))
-        target = root / relative
+        target = contained_path(root, relative, must_exist=False)
         if not target.exists():
             raise SystemExit(f"Target file missing: {relative.as_posix()}")
         current = target.read_bytes()
@@ -52,7 +72,11 @@ def main() -> int:
             raise SystemExit(f"Target does not match original or translated hash: {relative.as_posix()}")
         prefix = int(entry["prefix_bytes"])
         suffix = int(entry["suffix_bytes"])
-        middle = gzip.decompress((package / checked_relative(str(entry["payload"]))).read_bytes())
+        payload_relative = checked_relative(str(entry["payload"]))
+        payload = contained_path(package, payload_relative, must_exist=False)
+        if not payload.is_file():
+            raise SystemExit(f"Patch payload missing: {payload_relative.as_posix()}")
+        middle = gzip.decompress(payload.read_bytes())
         suffix_bytes = current[len(current) - suffix :] if suffix else b""
         translated = current[:prefix] + middle + suffix_bytes
         if sha256(translated) != entry["new_sha256"]:

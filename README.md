@@ -13,7 +13,8 @@
 
 ```powershell
 $repo = "path\to\unity-text-locator"
-$skills = Join-Path ($env:CODEX_HOME ?? (Join-Path $HOME ".codex")) "skills"
+$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+$skills = Join-Path $codexHome "skills"
 Copy-Item (Join-Path $repo "unity-text-locator") $skills -Recurse -Force
 Copy-Item (Join-Path $repo "ainiee-translate") $skills -Recurse -Force
 ```
@@ -23,6 +24,12 @@ Copy-Item (Join-Path $repo "ainiee-translate") $skills -Recurse -Force
 ```powershell
 py -3.12 -m venv "$HOME\.venvs\ainiee-translate"
 & "$HOME\.venvs\ainiee-translate\Scripts\python.exe" -m pip install -r "$repo\ainiee-translate\requirements.txt"
+```
+
+Unity 扫描、写回和字体检查还需要安装 Unity 运行依赖：
+
+```powershell
+py -3.12 -m pip install -r "$repo\unity-text-locator\requirements.txt"
 ```
 
 ## 工作流
@@ -59,7 +66,7 @@ py -3.12 -m venv "$HOME\.venvs\ainiee-translate"
 仓库不捆绑或指定默认字体二进制。字体必须由使用者合法取得，并针对目标游戏验证：
 
 ```powershell
-python unity-text-locator\scripts\inspect_tmp_font_bundle.py path\to\font.bundle --translation-csv path\to\game_translation.csv
+python unity-text-locator\scripts\inspect_tmp_font_bundle.py path\to\font.bundle --translation-root path\to\translation-output
 ```
 
 检查结果应同时关注：
