@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to inspect an unknown Unity game's text layout, extract project-named one-column text CSVs, accept matching one-column *_translation.csv files, validate and selectively apply safe rows, write approved rows back into Unity assets/Utage/BansheeGz BGDatabase/raw MonoBehaviour records, validate Addressables or IL2CPP candidates, diagnose Chinese font rendering, locate ES3 saves, or build verified binary-diff patch packages.
+description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to inspect an unknown Unity game's text layout, extract project-named one-column text CSVs, accept matching one-column *_translation.csv files, validate and selectively apply safe rows, write approved rows back into Unity assets/Utage/BansheeGz BGDatabase/raw MonoBehaviour records, inspect TMP font-bundle identity/version/glyph coverage, diagnose tofu versus atlas corruption, validate Addressables or IL2CPP candidates, locate ES3 saves, or build verified binary-diff patch packages.
 ---
 
 # Unity Translation Workflow
@@ -28,7 +28,7 @@ Read [references/unity-text-map.md](references/unity-text-map.md) when locating 
 Read [references/runtime-sensitive-adapters.md](references/runtime-sensitive-adapters.md) when handling BansheeGz databases, Addressables bundles/catalogs, ES3 saves, or runtime font compatibility.
 Read [references/workflow-modes.md](references/workflow-modes.md) before choosing semi-automatic or full-automatic translation.
 Read [references/ainiee-integration.md](references/ainiee-integration.md) before running full-automatic translation through `ainiee-translate`.
-Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before replacing TMP font assets with `arialuni_sdf_u2019`.
+Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before selecting, converting, or replacing any TMP font asset or font bundle.
 
 Public repository release notes belong in GitHub Releases. Do not add `CHANGELOG.md` to the GitHub repository.
 
@@ -120,6 +120,8 @@ Legacy `original_flat,zh_cn` translation files remain accepted by validation/wri
 | Loose CSV/JSON/TXT or custom scenario string parsers | Inspect format and preserve its record/newline contract | Project-specific |
 | Addressables catalogs/bundles or IL2CPP `global-metadata.dat` | Confirm exact runtime text, integrity metadata, and game-runtime loading before applying candidates | Project-specific |
 | Chinese displayed as boxes/tofu in Mono/TMP games with JSON injection tables | `install_tmp_chinese_font_fix.py --dry-run`, then apply | Preflighted runtime fallback workflow |
+| TMP font bundle candidate for resource-level replacement | `inspect_tmp_font_bundle.py`, then one-font runtime canary | Read-only compatibility and coverage gate |
+| IL2CPP game without a verified runtime loader | Inspect candidates or generate an exact-version TMP asset; do not use the Mono injector | Project-specific font workflow |
 
 ## Core Commands
 
@@ -273,11 +275,11 @@ For Addressables or IL2CPP metadata, require a backup and an integrity plan befo
 
 ## Font Diagnosis
 
-Treat remaining Japanese as a translation/extraction gap and tofu boxes as a font/glyph problem. Inspect `Player.log` and determine whether the text object uses TMP or legacy UI before applying a fix.
+Treat remaining Japanese as a translation/extraction gap. Distinguish uniform tofu squares from repeated glyph fragments or boxed atlas snippets: tofu indicates missing glyphs, while fragments indicate a font-table, atlas, stream, material, or platform-texture mismatch. Inspect the runtime log and map the visible component to TMP or legacy UI before applying a fix.
 
-Preferred published workflow: ask the user to download the Release asset `arialuni_sdf_u2019` into the installed `unity-text-locator/assets/` directory, replace the reviewed target TMP font asset/bundle with that local file, then launch the game and verify Chinese glyph rendering. Keep the original target file backup and record the `arialuni_sdf_u2019` SHA256 from the release asset.
+Never trust a font package filename. Run `inspect_tmp_font_bundle.py` to read the internal font identity, Unity version, glyph coverage, atlas metadata, and SHA-256. Require a one-font, one-screen runtime canary before broad replacement. UnityPy reopening is structural evidence, not visual or GPU-runtime proof. Follow [references/font-asset-replacement.md](references/font-asset-replacement.md) for stop conditions and rollback rules.
 
-Use runtime fallback only when direct `arialuni_sdf_u2019` replacement is not compatible with the game's asset layout. For compatible Mono/TMP games with `ScriptingAssemblies.json` and `RuntimeInitializeOnLoads.json`, run:
+For compatible Mono/TMP games with `ScriptingAssemblies.json` and `RuntimeInitializeOnLoads.json`, prefer the runtime fallback preflight:
 
 ```bash
 python scripts/install_tmp_chinese_font_fix.py "GameFolder" \
@@ -289,7 +291,7 @@ The fixer compiles the DLL and validates injection files during preflight, then 
 
 After installation, launch the game and inspect `Player.log`. Require an initialization log and no `MissingMethodException`, `Unable to load font face`, or repeated missing-glyph failures. Some stripped Mono builds omit `Font.CreateDynamicFontFromOSFont` or `ParameterInfo.HasDefaultValue`; use the shipped file-path/reflection-compatible fixer rather than assuming those APIs exist. If the game directory permits content writes but rejects rename replacement, keep the backup, accept verified copy-overwrite only, and remove or report staged `.tmp` files.
 
-Older builds without the JSON injection tables still require project-specific work in `globalgamemanagers` or a managed assembly hook; do not claim automatic installation for them.
+Older Mono builds without the JSON injection tables still require project-specific work in `globalgamemanagers` or a managed assembly hook. IL2CPP builds require a separately verified IL2CPP loader/plugin or an exact-version resource asset; do not claim the Mono installer applies.
 
 ## Save Discovery
 
@@ -326,6 +328,7 @@ Report:
 - dry-run and applied writeback counts, skipped rows, backups, and source-hash checks
 - intentionally preserved identity/config/resource rows
 - runtime or residual checks completed and unresolved source categories
+- TMP font inspection report, required-character coverage, canary scope, visual result, and rollback path when fonts were changed
 - confirmed save path and persistence evidence when save-location work is requested
 - patch manifest, payload sizes, installer verification, and package ZIP when distributing
 - whether any outputs were produced from a broad audit subset rather than a row-mapped source manifest

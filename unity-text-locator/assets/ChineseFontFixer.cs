@@ -27,15 +27,31 @@ public sealed class ChineseFontFixerRuntime : MonoBehaviour
     private Font legacyFont;
     private TMP_FontAsset fallbackFont;
     private float nextSlowPass;
-    private static readonly string[] FontPaths =
+    private static readonly string[] FontFileNames =
     {
-        @"C:\Windows\Fonts\msyh.ttc",
-        @"C:\Windows\Fonts\msyh.ttf",
-        @"C:\Windows\Fonts\NotoSansSC-VF.ttf",
-        @"C:\Windows\Fonts\simhei.ttf",
-        @"C:\Windows\Fonts\simsun.ttc",
-        @"C:\Windows\Fonts\Deng.ttf"
+        "msyh.ttc",
+        "msyh.ttf",
+        "NotoSansSC-VF.ttf",
+        "simhei.ttf",
+        "simsun.ttc",
+        "Deng.ttf"
     };
+    private static readonly string[] FontPaths = BuildFontPaths();
+
+    private static string[] BuildFontPaths()
+    {
+        string directory = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+        if (string.IsNullOrEmpty(directory))
+        {
+            directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts");
+        }
+        string[] paths = new string[FontFileNames.Length];
+        for (int i = 0; i < FontFileNames.Length; i++)
+        {
+            paths[i] = Path.Combine(directory, FontFileNames[i]);
+        }
+        return paths;
+    }
 
     private IEnumerator Start()
     {

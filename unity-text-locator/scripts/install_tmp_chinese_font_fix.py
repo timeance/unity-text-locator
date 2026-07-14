@@ -14,14 +14,25 @@ from pathlib import Path
 
 
 FONT_CHOICES = {
-    "Microsoft YaHei": [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyh.ttf"],
-    "Microsoft YaHei UI": [r"C:\Windows\Fonts\msyh.ttc"],
-    "Noto Sans SC": [r"C:\Windows\Fonts\NotoSansSC-VF.ttf"],
-    "SimHei": [r"C:\Windows\Fonts\simhei.ttf"],
-    "SimSun": [r"C:\Windows\Fonts\simsun.ttc"],
-    "DengXian": [r"C:\Windows\Fonts\Deng.ttf"],
+    "Microsoft YaHei": ["msyh.ttc", "msyh.ttf"],
+    "Microsoft YaHei UI": ["msyh.ttc"],
+    "Noto Sans SC": ["NotoSansSC-VF.ttf"],
+    "SimHei": ["simhei.ttf"],
+    "SimSun": ["simsun.ttc"],
+    "DengXian": ["Deng.ttf"],
 }
 DEFAULT_PATTERNS = ["misaki", "k8x12", "nijimi", "maboroshinonijimimincho", "pixel", "noto", "mplus", "liberation", "arial", "font"]
+
+
+def windows_root() -> Path:
+    value = os.environ.get("WINDIR") or os.environ.get("SystemRoot")
+    if not value:
+        raise SystemExit("WINDIR/SystemRoot is not set; use --font-file and provide csc.exe through a supported Windows environment.")
+    return Path(value)
+
+
+def fonts_dir() -> Path:
+    return windows_root() / "Fonts"
 
 
 def find_data_dir(root: Path) -> Path:
@@ -34,9 +45,10 @@ def find_data_dir(root: Path) -> Path:
 
 
 def find_csc() -> Path:
+    root = windows_root()
     candidates = [
-        Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
-        Path(r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe"),
+        root / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe",
+        root / "Microsoft.NET" / "Framework" / "v4.0.30319" / "csc.exe",
     ]
     csc = next((path for path in candidates if path.exists()), None)
     if not csc:
@@ -50,7 +62,7 @@ def resolve_font(font_name: str, font_file: Path | None) -> tuple[str, Path]:
             raise SystemExit(f"Font file not found: {font_file}")
         return font_file.stem, font_file
     for candidate in FONT_CHOICES.get(font_name, []):
-        path = Path(candidate)
+        path = fonts_dir() / candidate
         if path.exists():
             return font_name, path
     raise SystemExit(f"Could not find font '{font_name}'. Use --font-file PATH.")
@@ -61,8 +73,9 @@ def installed_runtime_font_files() -> list[str]:
     seen: set[str] = set()
     for candidates in FONT_CHOICES.values():
         for candidate in candidates:
-            normalized = str(Path(candidate))
-            if normalized not in seen and Path(candidate).exists():
+            path = fonts_dir() / candidate
+            normalized = str(path)
+            if normalized not in seen and path.exists():
                 found.append(normalized)
                 seen.add(normalized)
     return found
