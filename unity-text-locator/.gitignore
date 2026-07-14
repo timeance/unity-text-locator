@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*.tmp
+assets/*.ttf
+assets/*.otf
+assets/*.ttc
+assets/arialuni_sdf_*
