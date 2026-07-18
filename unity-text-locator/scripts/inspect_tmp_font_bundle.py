@@ -81,6 +81,14 @@ def pptr(value: Any) -> dict[str, int] | None:
     }
 
 
+def normalized_family(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+
+def population_mode_name(value: int) -> str:
+    return {0: "static", 1: "dynamic", 2: "dynamic-os"}.get(value, f"unknown-{value}")
+
+
 def collect_translation_chars(path: Path) -> Counter[str]:
     files = [path] if path.is_file() else sorted(path.rglob("*.csv"))
     chars: Counter[str] = Counter()
@@ -112,16 +120,19 @@ def main() -> int:
     env = UnityPy.load(str(bundle))
     materials: list[dict[str, Any]] = []
     textures: list[dict[str, Any]] = []
+    source_fonts: list[dict[str, Any]] = []
     fonts: list[dict[str, Any]] = []
 
     for obj in env.objects:
-        if obj.type.name not in {"MonoBehaviour", "Material", "Texture2D"}:
+        if obj.type.name not in {"MonoBehaviour", "Material", "Texture2D", "Font"}:
             continue
         try:
             data, name = read_name(obj)
         except Exception:
             continue
-        if obj.type.name == "Material":
+        if obj.type.name == "Font":
+            source_fonts.append({"name": name, "path_id": int(obj.path_id)})
+        elif obj.type.name == "Material":
             materials.append({"name": name, "path_id": int(obj.path_id)})
         elif obj.type.name == "Texture2D":
             stream = getattr(data, "m_StreamData", None)
@@ -145,6 +156,11 @@ def main() -> int:
             if glyphs is None or characters is None:
                 continue
             codepoints = {int(getattr(char, "m_Unicode", -1)) for char in characters}
+            population_mode = int(getattr(data, "m_AtlasPopulationMode", -1))
+            source_font = pptr(getattr(data, "m_SourceFontFile", None))
+            face_info = getattr(data, "m_FaceInfo", None)
+            face_family = str(getattr(face_info, "m_FamilyName", "")) if face_info else ""
+            face_style = str(getattr(face_info, "m_StyleName", "")) if face_info else ""
             fonts.append(
                 {
                     "name": name,
@@ -153,11 +169,65 @@ def main() -> int:
                     "glyph_count": len(glyphs),
                     "atlas_width": int(getattr(data, "m_AtlasWidth", 0)),
                     "atlas_height": int(getattr(data, "m_AtlasHeight", 0)),
-                    "atlas_population_mode": int(getattr(data, "m_AtlasPopulationMode", -1)),
+                    "atlas_population_mode": population_mode,
+                    "population_mode": population_mode_name(population_mode),
+                    "source_font_file": source_font,
+                    "face_family": face_family,
+                    "face_style": face_style,
                     "material": pptr(getattr(data, "m_Material", None) or getattr(data, "material", None)),
                     "atlas_textures": [pptr(item) for item in (getattr(data, "m_AtlasTextures", None) or [])],
                     "codepoints": codepoints,
                 }
+            )
+
+    sources_by_id = {item["path_id"]: item for item in source_fonts}
+    for font in fonts:
+        source_ref = font.get("source_font_file") or {}
+        source_name = ""
+        source_file_id = int(source_ref.get("file_id", 0))
+        source_path_id = int(source_ref.get("path_id", 0))
+        if source_file_id == 0:
+            source = sources_by_id.get(int(source_ref.get("path_id", 0)))
+            source_name = str((source or {}).get("name", ""))
+        if source_file_id:
+            source_status = "external-unresolved"
+        elif source_path_id == 0:
+            source_status = "none"
+        elif source_name:
+            source_status = "local-resolved"
+        else:
+            source_status = "local-unresolved"
+        face_family = str(font.get("face_family", ""))
+        identity_conflict: bool | None
+        if source_status != "local-resolved" or not face_family:
+            identity_conflict = None
+        else:
+            identity_conflict = bool(
+                normalized_family(source_name) != normalized_family(face_family)
+                and normalized_family(source_name) not in normalized_family(face_family)
+                and normalized_family(face_family) not in normalized_family(source_name)
+            )
+        populated_dynamic = (
+            str(font.get("population_mode", "")).startswith("dynamic")
+            and int(font.get("character_count", 0)) > 0
+            and int(font.get("glyph_count", 0)) > 0
+        )
+        font["source_font_name"] = source_name
+        font["source_font_resolution"] = source_status
+        font["font_family_identity_conflict"] = identity_conflict
+        font["source_font_only_replacement_risk"] = populated_dynamic
+        font["risk_notes"] = []
+        if identity_conflict is True:
+            font["risk_notes"].append(
+                "The TMP face family and referenced source Font identity differ; verify the visible component chain."
+            )
+        elif source_status.endswith("unresolved"):
+            font["risk_notes"].append(
+                "The source Font identity is unresolved in this file; trace the visible component/CAB chain before comparing families."
+            )
+        if populated_dynamic:
+            font["risk_notes"].append(
+                "BLOCK: this dynamic TMP asset already has character/glyph tables. Replacing only its source TTF can map valid Unicode to wrong glyph indices."
             )
 
     used_chars = collect_translation_chars(args.translation_root.resolve()) if args.translation_root else Counter()
@@ -184,6 +254,7 @@ def main() -> int:
         "sha256": sha256(bundle),
         "unity_versions": source_versions,
         "fonts": fonts,
+        "source_fonts": source_fonts,
         "materials": materials,
         "textures": textures,
         "runtime_canary_required": True,
