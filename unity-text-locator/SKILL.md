@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, extract occurrence-mapped one-column CSVs, bridge them through AiNiee-style translation, validate and transactionally write approved rows into serialized assets or verified middleware adapters, audit raw strings, diagnose TMP fonts, install a licensed app-local Noto fallback for supported Mono builds, inspect Addressables/IL2CPP risks, locate saves, or build SHA-verified patch packages.
+description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to discover and extract Unity text from serialized assets, fixed-byte DMSL records, component UI fields, Unity Localization StringTables, Utage, or BansheeGz BGDatabase; validate one-column translation CSVs; write occurrence-mapped candidates; diagnose Addressables CRC/catalog black screens; trace visible TMP components through FontAsset/material/CAB references; distinguish tofu, atlas corruption, and valid-Han glyph-index mis-mapping; build matched static TMP font candidates; locate ES3 saves; or package verified binary patches.
 ---
 
 # Unity Translation Workflow
@@ -14,7 +14,7 @@ Treat each Unity game as a separate format-discovery task. Do not assume that a 
 3. Extract project-named, one-column text files.
 4. Ask for matching one-column translation files.
 5. Validate row alignment and structural tokens; blank only row-addressable failures when the user elects partial writeback.
-6. Dry-run, prove source-specific serialization/runtime safety, back up, then write only approved rows.
+6. Dry-run, prove source-specific serialization/runtime safety, build candidates outside the game root, back up, then write only approved rows.
 7. Run source-specific residual and runtime checks.
 8. Build a SHA-verified binary patch package only after testing the translated files.
 
@@ -23,8 +23,6 @@ Use three gates for every project:
 - Discovery gate: report Unity version/layout, Mono versus IL2CPP, Addressables, middleware clues, and all candidate text sources before choosing an adapter.
 - Translator gate: expose only project-named one-column CSVs for row-mapped sources; keep broad `extracted_text.csv` as audit evidence, not as a writeback source.
 - Runtime gate: a clean CSV validation and a tool-level dry run are not enough for runtime-sensitive containers; prove the edited file loads through the same game path before distributing it.
-
-Keep `raw-utf8-fallback` audit-only by default. Expose it with `--include-raw-candidates` and write it with `--allow-raw-fallback` only after an adapter-specific container review. Normal writes must complete in staging, pass exact object/file validation, and commit with automatic rollback.
 
 Read [references/unity-text-map.md](references/unity-text-map.md) when locating candidate Unity text containers or middleware clues.
 Read [references/runtime-sensitive-adapters.md](references/runtime-sensitive-adapters.md) when handling BansheeGz databases, Addressables bundles/catalogs, ES3 saves, or runtime font compatibility.
@@ -61,6 +59,8 @@ GameFolder/_translation/unity-text-report/
 ```
 
 `scan_unity_text.py` and `extract_unity_text.py` default to this directory and ignore `_translation` while scanning. Put distributable patch archives outside the game directory only after verification.
+
+Reports, manifests, and CSVs may live under `_translation`, but rebuilt bundles, catalogs, font assets, and other runtime binary candidates must be written to a separate candidate root outside the game directory. Applying a candidate is a distinct, backed-up step.
 
 ## Translator File Contract
 
@@ -120,9 +120,13 @@ Legacy `original_flat,zh_cn` translation files remain accepted by validation/wri
 | Utage `ALL_Texts.book` / `ALL_EventTexts.book` in scenario assets or embedded assets | `extract_utage_scenarios.py`, `writeback_utage_scenarios.py` | Automated one-column workflow after confirming text column/books |
 | `bansheegz_database` TextAsset plus `BGDatabase.dll`/`BansheeGz.BGDatabase` | Build a one-shot game-runtime export/write/save probe and reinsert the verified payload | Runtime-specific structured adapter |
 | Loose CSV/JSON/TXT or custom scenario string parsers | Inspect format and preserve its record/newline contract | Project-specific |
+| `0x06 + uint32 LE + UTF-8` length-prefixed records, often near a `DMSL` signature | `extract_dmsl_text.py`, `writeback_dmsl_text.py` | Fixed-byte occurrence workflow; byte budget is blocking |
+| TMP/UI `m_text`, label fields, or Unity Localization `m_TableData.*.m_Localized` | `extract_typetree_ui_text.py`, `writeback_typetree_ui_text.py` | TypeTree occurrence workflow with field-path verification |
 | Addressables catalogs/bundles or IL2CPP `global-metadata.dat` | Confirm exact runtime text, integrity metadata, and game-runtime loading before applying candidates | Project-specific |
+| Rebuilt Addressables bundle loads to a black screen or logs CRC mismatch | `patch_addressables_catalog_crc.py`, then paired bundle/catalog canary | Binary catalog candidate; unique internal-name match only |
 | Chinese displayed as boxes/tofu in Mono/TMP games with JSON injection tables | `install_tmp_chinese_font_fix.py --dry-run`, then apply | Preflighted runtime fallback workflow |
-| TMP font bundle candidate for resource-level replacement | `inspect_tmp_font_bundle.py`, then one-font runtime canary | Read-only compatibility and coverage gate |
+| TMP font bundle candidate for resource-level replacement | `trace_tmp_font_usage.py`, `inspect_tmp_font_bundle.py`, then one-font runtime canary | Visible-component identity and coverage gate |
+| Correct Unicode renders as another valid Chinese character | Verify CSV/code point, inspect populated TMP tables, then build a matched static set | Glyph-index conflict; not translation substitution |
 | IL2CPP game without a verified runtime loader | Inspect candidates or generate an exact-version TMP asset; do not use the Mono injector | Project-specific font workflow |
 
 ## Core Commands
@@ -134,6 +138,46 @@ python scripts/scan_unity_text.py "path/to/GameFolder"
 ```
 
 This keeps the broad `extracted_text.csv` and `extraction_manifest.json` for audit, and creates translator-facing, occurrence-preserving files in `text/`.
+
+For fixed-width DMSL operands, extract from explicit inputs or a constrained candidate root:
+
+```bash
+python scripts/extract_dmsl_text.py "GameFolder" \
+  --candidate-root "Game_Data/StreamingAssets/aa/StandaloneWindows64" \
+  --out-dir "GameFolder/_translation/unity-text-report/text"
+```
+
+After validation, dry-run the fixed byte budgets, then write only to an external candidate root:
+
+```bash
+python scripts/writeback_dmsl_text.py "GameFolder" \
+  --manifest "GameFolder/_translation/unity-text-report/text/GameTitle_dmsl_text.manifest.json" \
+  --translation-csv "GameFolder/_translation/unity-text-report/text/GameTitle_dmsl_text_translation.csv" \
+  --report "CandidateReports/dmsl_dry_run.json"
+```
+
+Add `--base-root "PriorCandidateRoot" --out-dir "NextCandidateRoot" --write` only after the dry run is clean. Any over-budget row rejects the whole batch and must be shortened and revalidated; the writer never truncates UTF-8.
+
+Extract component UI fields and Unity Localization StringTables with:
+
+```bash
+python scripts/extract_typetree_ui_text.py "GameFolder" \
+  --scan-root "Game_Data/StreamingAssets/aa" \
+  --out-dir "GameFolder/_translation/unity-text-report/text"
+```
+
+Dry-run `writeback_typetree_ui_text.py` with its manifest, source CSV, and translation CSV. Use `--base-root` to compose over a DMSL candidate, and add `--out-root "NextCandidateRoot" --write` only after every object identity and field path still matches.
+
+For a rebuilt Addressables bundle, generate the paired external catalog candidate from its internal name:
+
+```bash
+python scripts/patch_addressables_catalog_crc.py \
+  "GameFolder/Game_Data/StreamingAssets/aa/catalog.bin" \
+  --bundle "CandidateRoot/Game_Data/StreamingAssets/aa/StandaloneWindows64/changed.bundle" \
+  --game-root "GameFolder" --out-dir "CatalogCandidateRoot" --write
+```
+
+The catalog tool rejects unknown/duplicate records and byte-compares the result so only the selected CRC field can change. Apply and roll back the bundle/catalog pair together.
 
 When a broad audit CSV must be narrowed for human translation review, produce a conservative visible-safe subset and audit the omissions:
 
@@ -182,8 +226,6 @@ Use the sibling `ainiee-translate` skill to run the batch translation loop on th
   --source-csv "GameFolder/_translation/unity-text-report/text/GameTitle_text.csv" \
   --out-csv "GameFolder/_translation/unity-text-report/text/GameTitle_text_translation.csv"
 ```
-
-This conversion is fail-closed: it verifies the source CSV fingerprint and rejects missing, duplicate, untranslated, or blank rows. `--allow-partial` is only for generating a review artifact and must not feed final writeback.
 
 Then run `validate_translation_csv.py` exactly as in the semi-automatic path.
 
@@ -275,24 +317,35 @@ For Utage, check both `StreamingAssets/Utage_AdvProject` and embedded books in `
 
 For a BansheeGz/BGDatabase payload embedded in a TextAsset, do not infer its serialized field format from exported bytes. If the game's managed API can load and save it, use a temporary runtime probe to export occurrences, compare each selected source value, write translated field values, and save a verified replacement payload. Remove all probe registration and DLLs before smoke-testing the normal game.
 
-For Addressables or IL2CPP metadata, require a backup and an integrity plan before edits. Catalog hashes/CRCs, bundle packing, or metadata offsets may make ordinary asset writeback unsuitable. A candidate that UnityPy can reopen is not approved unless the game runtime can load it without Addressables/bundle errors.
+For Addressables or IL2CPP metadata, require a backup and an integrity plan before edits. Locate a binary catalog entry from the bundle's internal `AssetBundle.m_Name`, never from an opaque disk filename alone. When a uniquely identified CRC must be disabled, use `patch_addressables_catalog_crc.py` to change only that four-byte field in an external catalog candidate; do not guess `catalog.hash` or `bundleSize`. Treat bundle plus catalog as one canary and one rollback unit. A candidate that UnityPy can reopen is not approved unless the game runtime loads it without Addressables/bundle errors.
+
+After an Addressables edit causes a black screen, inspect `Player.log` before revising translations or fonts. Search for CRC mismatch, `Will not load AssetBundle`, bundle dependency/load errors, and catalog parse/hash/cache failures. Preserve the log and roll back the bundle/catalog pair before trying another candidate.
 
 ## Font Diagnosis
 
-Treat remaining Japanese as a translation/extraction gap. Distinguish uniform tofu squares from repeated glyph fragments or boxed atlas snippets: tofu indicates missing glyphs, while fragments indicate a font-table, atlas, stream, material, or platform-texture mismatch. Inspect the runtime log and map the visible component to TMP or legacy UI before applying a fix.
+Treat remaining Japanese as a translation/extraction gap. Distinguish uniform tofu squares from repeated glyph fragments or boxed atlas snippets: tofu indicates missing glyphs, while fragments indicate a font-table, atlas, stream, material, or platform-texture mismatch. A correct source character rendered as another valid Han character indicates a glyph-index conflict: verify the CSV and Unicode first, then inspect the TMP tables instead of changing the translation. Inspect the runtime log and map the visible component to TMP or legacy UI before applying a fix.
 
-Never trust a font package filename. Run `inspect_tmp_font_bundle.py` to read the internal font identity, Unity version, glyph coverage, atlas metadata, and SHA-256. Require a one-font, one-screen runtime canary before broad replacement. UnityPy reopening is structural evidence, not visual or GPU-runtime proof. Follow [references/font-asset-replacement.md](references/font-asset-replacement.md) for stop conditions and rollback rules.
+Never trust a font package filename or guess the primary font by name. Use `trace_tmp_font_usage.py` from a visible failing component to establish the actual FontAsset/Material/CAB/bundle chain. Run `inspect_tmp_font_bundle.py` to read dynamic/static mode, populated tables, source Font PPtr/family identity, Unity version, glyph coverage, atlas metadata, and SHA-256. If a dynamic asset already has character/glyph tables, never replace only its source TTF. Static replacement must move the matched character table, glyph table, material parameters, and SDF atlas together with `build_static_tmp_fontasset.py`. Require a one-font, one-screen runtime canary before broad replacement. UnityPy reopening is structural evidence, not visual or GPU-runtime proof. Follow [references/font-asset-replacement.md](references/font-asset-replacement.md) for stop conditions and rollback rules.
+
+Trace from a visible string or component name while indexing dependency bundles:
+
+```bash
+python scripts/trace_tmp_font_usage.py \
+  --asset "ComponentBundle" --candidate-root "AddressablesBundleRoot" \
+  --text-contains "Visible failing text" --out "CandidateReports/tmp_usage.json"
+```
+
+When static replacement is justified, pass the traced target FontAsset, Material, and Texture2D PathIDs explicitly to `build_static_tmp_fontasset.py`, along with a donor, approved translation root, game root, external output, and report path. Exact Unity versions and real donor coverage are required by default; explicit mismatch or donor-alias opt-ins mark the result canary-only.
 
 For compatible Mono/TMP games with `ScriptingAssemblies.json` and `RuntimeInitializeOnLoads.json`, prefer the runtime fallback preflight:
 
 ```bash
 python scripts/install_tmp_chinese_font_fix.py "GameFolder" \
-  --runtime-font-file "path/to/licensed/NotoSansCJKsc-Regular.otf" \
   --out-dir "GameFolder/_translation/unity-text-report/font-fix" \
   --dry-run
 ```
 
-The fixer compiles the DLL and validates injection files during preflight, then applies the DLL, JSON, and app-local runtime font as one rollback-capable change set. Prefer a legally redistributable Noto CJK/SC font; never publish `arialuni_sdf_u2019` without explicit redistribution rights. When no runtime font is supplied, the fixer may fall back to installed system CJK fonts. Use embedded replacement only after exact Unity/TMP compatibility review.
+The fixer compiles the DLL and validates injection files during preflight, then applies all planned writes with backups only when run without `--dry-run`. Its default runtime behavior chooses an installed CJK font file, adds a dynamic TMP fallback, and changes legacy UI fonts only for strings with missing CJK glyphs; it does not replace every TMP font. Use `--patch-embedded-fonts --font "Microsoft YaHei"` only when a reviewed embedded legacy `Font` replacement is needed.
 
 After installation, launch the game and inspect `Player.log`. Require an initialization log and no `MissingMethodException`, `Unable to load font face`, or repeated missing-glyph failures. Some stripped Mono builds omit `Font.CreateDynamicFontFromOSFont` or `ParameterInfo.HasDefaultValue`; use the shipped file-path/reflection-compatible fixer rather than assuming those APIs exist. If the game directory permits content writes but rejects rename replacement, keep the backup, accept verified copy-overwrite only, and remove or report staged `.tmp` files.
 

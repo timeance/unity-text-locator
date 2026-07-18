@@ -82,7 +82,22 @@ python unity-text-locator/scripts/validate_translation_csv.py \
 
 ## Guardrails
 
-- Cache writes are atomic and cooperatively locked, but subagents should still produce separate batch JSON files and let one coordinator write `cache.json`.
+- Do not let subagents write the same `cache.json` concurrently.
 - Do not use AiNiee output directly for Unity writeback; always convert to `zh_cn` CSV and run Unity validation.
-- Conversion verifies the source CSV content hash, index continuity, translation status, and nonblank output. Any incomplete row fails by default.
-- `--allow-partial` emits blanks only for an explicitly requested review artifact. Do not pass such output to writeback.
+- Blank translations remain intentional skips.
+- If the translated cache has fewer rows than the source CSV, conversion emits blank rows for missing indexes and validation/reporting should catch the gap before writeback.
+
+## Fixed-Byte DMSL Sources
+
+Some DMSL containers store each string as `0x06 + uint32 little-endian length + UTF-8`, but the runtime or surrounding bundle still requires every replacement to fit the original byte span. Translation quality validation and structural-token validation do not prove this byte budget.
+
+Use this loop:
+
+1. Extract with `extract_dmsl_text.py`; keep its occurrence manifest and source SHA-256.
+2. Translate through the normal AiNiee cache bridge and validate the returned one-column CSV.
+3. Run `writeback_dmsl_text.py --dry-run`. The report must list every row whose UTF-8 translation exceeds its original byte budget and must not emit a candidate.
+4. Shorten the reported Chinese rows without changing names, placeholders, tags, or meaning. Never silently truncate encoded bytes.
+5. Re-run ordinary CSV validation and the DMSL dry run until every nonblank row fits.
+6. Generate the candidate outside the game root, reopen it, and verify every occurrence and length prefix before any application step.
+
+When TypeTree UI and DMSL records overlap the same bundle, use the writer's `--base-root` to layer the second candidate on the first. The final writer must still verify each field/record against the manifest rather than treating a prior candidate as trusted.

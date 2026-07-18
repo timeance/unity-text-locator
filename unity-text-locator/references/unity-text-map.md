@@ -1,13 +1,5 @@
 # Unity Text Location Map
 
-## Contents
-
-- Common locations and middleware clues
-- Discovery order and tool choice
-- Per-source CSV/manifest contract
-- Safe writeback and validation
-- Font fallback and completion evidence
-
 ## Common Locations
 
 | Location | What it may contain | First action |
@@ -35,6 +27,7 @@
 | `I2Languages`, `I2Loc`, `LanguageSource` | I2 Localization | Export ScriptableObjects/MonoBehaviours |
 | `LocalizeStringEvent`, `StringTableCollection` | Unity Localization package | Export string tables and Addressables |
 | `TextMeshPro`, `TMP_Text` | TextMeshPro UI text | Inspect prefabs/scenes/MonoBehaviours |
+| `DMSL` near `0x06 + uint32 LE + UTF-8` operands | Custom length-prefixed scenario bytecode | Use the fixed-byte DMSL extractor and retain every occurrence/byte budget |
 | `bansheegz_database`, `BGDatabase.dll`, `BGRepo` | BansheeGz BGDatabase | Use a game-runtime load/export/save probe; do not raw-patch payload bytes |
 | `ES3`, `ES3Defaults`, `SaveFile.es3`, `AutoSave.es3` | Easy Save 3 persistence | Inspect defaults resource and confirm actual save path/timestamps |
 
@@ -119,6 +112,8 @@ searching for translated bytes after the write rather than trusting old offsets.
 For raw fallback byte spans, write back only when the UTF-8 translated byte length
 does not exceed the original byte span; pad shorter replacements with spaces.
 
+For visible UI missed by scenario extraction, inspect MonoBehaviour TypeTrees for `m_text`, label/caption/title-like fields, and Unity Localization `m_TableData[*].m_Localized`. Preserve serialized-file identity, PathID, a typed field path, source field hash, and duplicate occurrence metadata; PathID alone is not unique across serialized files inside a bundle.
+
 Before writing:
 
 - create timestamped backups under the report `writeback/<source>/backups/` directory, or pass an explicit `--backup-dir` when a project needs a different backup root;
@@ -130,10 +125,14 @@ is only a structural check. Preserve compression/integrity metadata where
 applicable and require a game-runtime bundle/Addressables load test before
 applying the bundle or its catalog changes.
 
+For a binary catalog, derive the lookup key from `AssetBundle.m_Name`, require one plausible record, and audit an exact four-byte CRC field change. Do not infer a record from the external bundle filename, and do not guess the catalog hash or stored bundle size.
+
 ## Chinese Font Fix
 
 If translated Chinese renders as square boxes, the likely cause is that the game
 uses embedded Japanese pixel fonts or a TMP font asset without Chinese glyphs.
+
+If the serialized translation contains the correct Unicode but the screen shows a different valid Han character, this is not tofu and usually is not a translation error. Trace the visible component to its actual TMP FontAsset and check for a populated dynamic character/glyph table paired with a replaced source Font.
 
 Preferred runtime font files on Windows, in order of availability:
 
