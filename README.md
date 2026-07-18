@@ -2,12 +2,37 @@
 
 面向 Unity 游戏本地化的可移植 Codex skills 仓库。
 
-仓库包含：
+## 快速开始
 
-- `unity-text-locator`：识别 Unity 文本布局，提取和校验单列 CSV，安全写回 Unity 资源，并诊断 TextMeshPro 字体问题。
-- `ainiee-translate`：在 coding agent 内执行 AiNiee 风格的术语表、分批翻译、校验和导出流程。
+### 快速安装（推荐）
 
-## 安装
+在 Codex 中输入：
+
+```text
+从 https://github.com/timeance/unity-text-locator.git 拉取并安装 unity-text-locator 和 ainiee-translate，同时安装依赖；如果本机没有 Git，请改用 ZIP 下载。
+```
+
+仓库地址：[timeance/unity-text-locator.git](https://github.com/timeance/unity-text-locator.git)。无 Git 时也可直接下载 [ZIP 压缩包](https://github.com/timeance/unity-text-locator/archive/refs/heads/main.zip)。
+
+### 快速使用（全自动模式）
+
+由 Codex 提取并翻译游戏文本：
+
+```text
+汉化游戏：<游戏目录>。用 $unity-text-locator Full-Automatic 串联 $ainiee-translate；先确认样稿，再完成回写、字体和运行时验证。允许子代理。
+```
+
+完全无人值守时，把“先确认样稿”替换为“采用模式 C，不中途确认”。
+
+### 快速使用（半自动模式）
+
+由 Codex 提取文本，译文在外部完成：
+
+```text
+提取游戏文本：<游戏目录>。用 $unity-text-locator Semi-Automatic 生成原文 CSV 和 manifest；等待我提供 *_translation.csv 后，再校验、回写、处理字体并做运行时验证。
+```
+
+### 手动安装
 
 将所需 skill 复制到 Codex skills 目录：
 
@@ -32,6 +57,11 @@ Unity 扫描、写回和字体检查还需要安装 Unity 运行依赖：
 py -3.12 -m pip install -r "$repo\unity-text-locator\requirements.txt"
 ```
 
+## 仓库内容
+
+- `unity-text-locator`：识别 Unity 文本布局，提取和校验单列 CSV，安全写回 Unity 资源，并诊断 TextMeshPro 字体问题。
+- `ainiee-translate`：在 coding agent 内执行 AiNiee 风格的术语表、分批翻译、校验和导出流程。
+
 ## 工作流
 
 ```text
@@ -46,20 +76,6 @@ py -3.12 -m pip install -r "$repo\unity-text-locator\requirements.txt"
 ```
 
 详细流程由 skill 根据游戏实际结构选择；不要假设所有 Unity 游戏使用相同的资源布局。
-
-## 建议提示词
-
-需要让 Codex 端到端处理 Unity 游戏翻译项目时，可以使用下面的提示词，并把 `xxx` 替换为游戏工作目录或根目录：
-
-```text
-请翻译工作目录里的游戏：xxx。
-
-先使用 skill：unity-text-locator 检查 Unity 游戏结构，定位实际显示文本源，生成按项目命名的一列原文 CSV 和 manifest；如果发现多个文本源，请先报告候选源和推荐适配器。
-
-然后使用 skill：ainiee-translate 进行全自动翻译。翻译时保留 Unity/TMP 标签、占位符、换行标记和 manifest 行对齐关系。
-
-最后把翻译结果转回 *_translation.csv，运行 CSV 结构校验和 dry-run 写回预检；只有校验通过后再写回 Unity 资源。写回前备份，写回后做运行时、字体和残留检查，并报告校验结果、写回数量、跳过行、备份路径和未覆盖文本源。
-```
 
 ## TMP 字体诊断
 
