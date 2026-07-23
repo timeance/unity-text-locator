@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to discover and extract Unity text from serialized assets, fixed-byte DMSL records, component UI fields, Unity Localization StringTables, Utage, or BansheeGz BGDatabase; validate one-column translation CSVs; write occurrence-mapped candidates; generate auditable runtime AutoTranslator candidates for statically undiscoverable text; diagnose Addressables CRC/catalog black screens; trace visible TMP components through FontAsset/material/CAB references; distinguish tofu, atlas corruption, and valid-Han glyph-index mis-mapping; build matched static TMP font candidates; locate ES3 saves; or package verified binary patches.
+description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, migrate translations across game versions, extract occurrence-mapped text from serialized assets, bytecode, UI, Localization StringTables, Utage, or middleware, bridge rows through AiNiee-style translation, validate and transactionally write approved candidates, audit residual and runtime-only text, diagnose TMP fonts and Addressables/IL2CPP failures, locate saves, or acceptance-test SHA-verified patches.
 ---
 
 # Unity Translation Workflow
@@ -33,6 +33,7 @@ Read [references/ainiee-integration.md](references/ainiee-integration.md) before
 Read [references/mono-raw-residual.md](references/mono-raw-residual.md) when TypeTree reading fails, an embedded Utage book is incomplete, or visible Japanese survives normal writeback.
 Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before selecting, converting, or replacing any TMP font asset or font bundle.
 Read [references/runtime-text-adapters.md](references/runtime-text-adapters.md) before generating or testing an AutoTranslator candidate for IL2CPP, Naninovel, GameCreator, custom-rendered, or runtime-only text.
+Read [references/version-migration-and-release-audit.md](references/version-migration-and-release-audit.md) when porting a translation to a newer game version, separating scratch candidates from durable project evidence, selecting a runtime Locale/StringTable, auditing short bytecode choices or residual Japanese, choosing static CJK font coverage or smoke-test depth, or preparing a release-only patch baseline.
 
 Public repository release notes belong in GitHub Releases. Do not add `CHANGELOG.md` to the GitHub repository.
 
