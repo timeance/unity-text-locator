@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, extract occurrence-mapped one-column CSVs, bridge them through AiNiee-style translation, validate and transactionally write approved rows into serialized assets or verified middleware adapters, audit raw strings, diagnose TMP fonts, install a licensed app-local Noto fallback for supported Mono builds, inspect Addressables/IL2CPP risks, locate saves, or build SHA-verified patch packages.
+description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, migrate an existing translation to a new game version, extract occurrence-mapped one-column CSVs including embedded bytecode operands, bridge them through AiNiee-style translation, validate and transactionally write approved rows into serialized assets or verified middleware adapters, audit residual text, diagnose TMP fonts, inspect Addressables/IL2CPP risks, locate saves, or build and acceptance-test SHA-verified patch packages.
 ---
 
 # Unity Translation Workflow
@@ -31,6 +31,7 @@ Read [references/runtime-sensitive-adapters.md](references/runtime-sensitive-ada
 Read [references/workflow-modes.md](references/workflow-modes.md) before choosing semi-automatic or full-automatic translation.
 Read [references/ainiee-integration.md](references/ainiee-integration.md) before running full-automatic translation through `ainiee-translate`.
 Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before selecting, converting, or replacing any TMP font asset or font bundle.
+Read [references/version-migration-and-release-audit.md](references/version-migration-and-release-audit.md) when porting a translation to a newer game version, auditing short bytecode choices or residual Japanese, choosing a smoke-test depth, or preparing a release-only patch baseline.
 
 Public repository release notes belong in GitHub Releases. Do not add `CHANGELOG.md` to the GitHub repository.
 
