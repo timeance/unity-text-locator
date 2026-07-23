@@ -31,7 +31,7 @@ Read [references/runtime-sensitive-adapters.md](references/runtime-sensitive-ada
 Read [references/workflow-modes.md](references/workflow-modes.md) before choosing semi-automatic or full-automatic translation.
 Read [references/ainiee-integration.md](references/ainiee-integration.md) before running full-automatic translation through `ainiee-translate`.
 Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before selecting, converting, or replacing any TMP font asset or font bundle.
-Read [references/version-migration-and-release-audit.md](references/version-migration-and-release-audit.md) when porting a translation to a newer game version, auditing short bytecode choices or residual Japanese, choosing a smoke-test depth, or preparing a release-only patch baseline.
+Read [references/version-migration-and-release-audit.md](references/version-migration-and-release-audit.md) when porting a translation to a newer game version, separating scratch candidates from durable project evidence, selecting a runtime Locale/StringTable, auditing short bytecode choices or residual Japanese, choosing static CJK font coverage or smoke-test depth, or preparing a release-only patch baseline.
 
 Public repository release notes belong in GitHub Releases. Do not add `CHANGELOG.md` to the GitHub repository.
 
