@@ -1,4 +1,4 @@
 interface:
   display_name: "Unity Translation Pipeline"
-  short_description: "Safely extract, translate, write, and debug Unity game text."
-  default_prompt: "Use $unity-text-locator to inspect this Unity game, extract and validate project-named translation CSVs, choose the correct writeback adapter, inspect TMP font-bundle compatibility and glyph coverage, and verify runtime loading before packaging."
+  short_description: "Safely extract and localize Unity text and fonts."
+  default_prompt: "Use $unity-text-locator to discover Unity text sources, validate occurrence-mapped translations, choose a safe static or optional runtime adapter, and require a runtime canary before packaging."

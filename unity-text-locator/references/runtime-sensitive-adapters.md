@@ -29,10 +29,16 @@ Text-table rows inside a bundle may be readable and writable while the resulting
 Required gates:
 
 1. Preserve original bundle packing/compression when rebuilding where possible.
-2. Determine whether catalog entries carry CRC, hash, size, cache, or local-load options.
-3. Treat catalog edits as integrity changes: keep an untouched original and write a candidate first.
-4. Validate the rebuilt bundle in the Unity game runtime, ideally through the same loading route used by Addressables.
-5. If runtime load fails or cannot be proven, do not apply the translated bundle or catalog even when translation CSV validation passed.
+2. Read the rebuilt bundle's internal `AssetBundle.m_Name`; use that exact value to locate its binary catalog record. Do not match by an opaque on-disk filename alone.
+3. Determine whether catalog entries carry CRC, hash, size, cache, or local-load options. Catalog layouts vary, so unknown or duplicate internal-name records are blocking failures.
+4. For the supported binary layout, use `patch_addressables_catalog_crc.py` to create an external catalog candidate. By default, set only the uniquely identified record's four-byte CRC to zero and byte-compare the result. Do not guess `catalog.hash`, and do not update `bundleSize` without a separately proven layout and runtime need.
+5. Treat the rebuilt bundle and matching catalog candidate as one canary unit. Apply both together after backing up both; if either copy fails, restore both. Never leave a new bundle paired with the old CRC catalog.
+6. Validate the pair in the Unity game runtime through the same loading route used by Addressables.
+7. If runtime load fails or cannot be proven, roll back both files even when CSV validation and UnityPy reopening passed.
+
+If a rebuilt Addressables bundle produces a black screen, inspect `Player.log` before changing text or fonts again. Search first for `CRC Mismatch`, `Will not load AssetBundle`, bundle load exceptions, catalog parse errors, missing dependencies, and hash/cache failures. A CRC mismatch is an integrity-pair failure, not evidence that the translated text or TMP font is bad.
+
+`patch_addressables_catalog_crc.py` is a candidate generator, not an installer. Its output and JSON byte-diff report must stay outside the game root. Application and rollback remain explicit, backed-up operations.
 
 Translation structure validation answers whether rows are safe text. It does not prove resource-container integrity.
 

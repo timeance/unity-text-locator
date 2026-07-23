@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ENCODINGS = ["utf-8-sig", "utf-8", "gb18030", "cp936", "shift_jis", "cp932"]
-PLACEHOLDER_RE = re.compile(r"(<[^>]+>|\\[nrt]|\{[^{}]+\}|%[sdif]|\$[A-Za-z0-9_]+|\[[A-Za-z0-9_:-]+\])")
+PLACEHOLDER_RE = re.compile(r"(<[^>]+>|\\\\|\\[Nnrt]|\{[^{}]+\}|%[sdif]|\$[A-Za-z0-9_]+|\[[A-Za-z0-9_:-]+\])")
 TAG_RE = re.compile(r"<[^>]*>")
 JP_KANA_RE = re.compile(r"[\u3040-\u3096\u30a1-\u30fa\uff66-\uff9d]")
 

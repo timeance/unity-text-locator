@@ -6,6 +6,7 @@ Use semi-automatic mode when translation is produced outside the agent.
 
 ```text
 scan/extract
+-> audit TypeTree failures and raw MonoBehaviour residual candidates
 -> source CSVs in text/
 -> user supplies matching *_translation.csv files
 -> validate_translation_csv.py
@@ -13,8 +14,9 @@ scan/extract
 -> writeback dry-run
 -> writeback apply
 -> font replacement
+-> rerun source-specific residual audit until zero unreviewed visible occurrences
 -> runtime check
--> patch package
+-> rebuild patch from pristine originals to final candidate and clean-install test
 ```
 
 Rules:
@@ -30,19 +32,24 @@ Use full-automatic mode when the agent should translate proactively through the 
 
 ```text
 scan/extract
+-> audit TypeTree failures and raw MonoBehaviour residual candidates
 -> source CSVs in text/
 -> unity_csv_to_ainiee_cache.py
 -> ainiee-translate batch read/write loop
+-> independent terminology/missed-translation review
 -> ainiee_cache_to_unity_translation.py
 -> validate_translation_csv.py
 -> writeback dry-run
 -> writeback apply
 -> font replacement
+-> rerun source-specific residual audit until zero unreviewed visible occurrences
 -> runtime check
--> patch package
+-> rebuild patch from pristine originals to final candidate and clean-install test
 ```
 
 Full-auto only changes who fills `zh_cn`. It does not change Unity safety gates.
+
+Subagents may translate independent batches only into separate result JSON files. The primary agent serializes those files into `cache.json`, converts the complete cache back to Unity CSV, validates it, and applies review corrections through another serialized cache write. Never let concurrent workers edit the shared cache.
 
 ## Choosing A Mode
 
