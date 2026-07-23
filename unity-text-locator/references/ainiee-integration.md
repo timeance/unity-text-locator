@@ -62,6 +62,10 @@ PYTHONPATH="path/to/ainiee-translate/scripts" "$AINIEE_PY" \
 
 Repeat until `batch read` returns `[]`.
 
+For parallel translation, give each worker a disjoint `text_index` range and a unique result JSON path. Workers must not edit `cache.json`. The primary agent validates indexes and structural markers, then runs `batch write` serially for each result file.
+
+Before conversion, run an independent review pass over source/translation pairs for omitted text, terminology, names, and control markers. Apply corrections through a small result JSON and one more serialized `batch write`; do not hand-edit the cache.
+
 ## AiNiee Cache To Unity CSV
 
 ```bash
@@ -86,6 +90,7 @@ python unity-text-locator/scripts/validate_translation_csv.py \
 - Do not use AiNiee output directly for Unity writeback; always convert to `zh_cn` CSV and run Unity validation.
 - Blank translations remain intentional skips.
 - If the translated cache has fewer rows than the source CSV, conversion emits blank rows for missing indexes and validation/reporting should catch the gap before writeback.
+- Full-auto completion is not extraction completion. After all translated sources, fonts, and candidates are composed, rerun the source-specific residual audit. Any newly found visible row returns to the AiNiee bridge and invalidates the existing patch ZIP.
 
 ## Fixed-Byte DMSL Sources
 

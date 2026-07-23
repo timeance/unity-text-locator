@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to discover and extract Unity text from serialized assets, fixed-byte DMSL records, component UI fields, Unity Localization StringTables, Utage, or BansheeGz BGDatabase; validate one-column translation CSVs; write occurrence-mapped candidates; diagnose Addressables CRC/catalog black screens; trace visible TMP components through FontAsset/material/CAB references; distinguish tofu, atlas corruption, and valid-Han glyph-index mis-mapping; build matched static TMP font candidates; locate ES3 saves; or package verified binary patches.
+description: Adaptive Unity Japanese-to-Chinese translation workflow. Use when Codex needs to discover and extract Unity text from serialized assets, fixed-byte DMSL records, component UI fields, Unity Localization StringTables, Utage, or BansheeGz BGDatabase; validate one-column translation CSVs; write occurrence-mapped candidates; generate auditable runtime AutoTranslator candidates for statically undiscoverable text; diagnose Addressables CRC/catalog black screens; trace visible TMP components through FontAsset/material/CAB references; distinguish tofu, atlas corruption, and valid-Han glyph-index mis-mapping; build matched static TMP font candidates; locate ES3 saves; or package verified binary patches.
 ---
 
 # Unity Translation Workflow
@@ -15,8 +15,8 @@ Treat each Unity game as a separate format-discovery task. Do not assume that a 
 4. Ask for matching one-column translation files.
 5. Validate row alignment and structural tokens; blank only row-addressable failures when the user elects partial writeback.
 6. Dry-run, prove source-specific serialization/runtime safety, build candidates outside the game root, back up, then write only approved rows.
-7. Run source-specific residual and runtime checks.
-8. Build a SHA-verified binary patch package only after testing the translated files.
+7. Run the same source-specific residual audit on the composed final candidate; resolve every visible candidate and rerun until zero unreviewed visible occurrences remain.
+8. Build a SHA-verified binary patch only from pristine originals to that final runtime-tested candidate.
 
 Use three gates for every project:
 
@@ -24,11 +24,15 @@ Use three gates for every project:
 - Translator gate: expose only project-named one-column CSVs for row-mapped sources; keep broad `extracted_text.csv` as audit evidence, not as a writeback source.
 - Runtime gate: a clean CSV validation and a tool-level dry run are not enough for runtime-sensitive containers; prove the edited file loads through the same game path before distributing it.
 
+Prefer static occurrence-mapped writeback. Use a runtime text adapter only for confirmed visible strings that static discovery cannot reach, and keep its global key-based output separate from static manifests and writeback artifacts.
+
 Read [references/unity-text-map.md](references/unity-text-map.md) when locating candidate Unity text containers or middleware clues.
 Read [references/runtime-sensitive-adapters.md](references/runtime-sensitive-adapters.md) when handling BansheeGz databases, Addressables bundles/catalogs, ES3 saves, or runtime font compatibility.
 Read [references/workflow-modes.md](references/workflow-modes.md) before choosing semi-automatic or full-automatic translation.
 Read [references/ainiee-integration.md](references/ainiee-integration.md) before running full-automatic translation through `ainiee-translate`.
+Read [references/mono-raw-residual.md](references/mono-raw-residual.md) when TypeTree reading fails, an embedded Utage book is incomplete, or visible Japanese survives normal writeback.
 Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before selecting, converting, or replacing any TMP font asset or font bundle.
+Read [references/runtime-text-adapters.md](references/runtime-text-adapters.md) before generating or testing an AutoTranslator candidate for IL2CPP, Naninovel, GameCreator, custom-rendered, or runtime-only text.
 
 Public repository release notes belong in GitHub Releases. Do not add `CHANGELOG.md` to the GitHub repository.
 
@@ -54,6 +58,8 @@ GameFolder/_translation/unity-text-report/
     GameTitle_ui_text.manifest.json
     source_text_index.json
   validation/
+  runtime/
+    autotranslator/
   writeback/
   backups/
 ```
@@ -118,11 +124,13 @@ Legacy `original_flat,zh_cn` translation files remain accepted by validation/wri
 | Broad `extracted_text.csv` contains mixed visible/internal rows and needs manual narrowing | `build_visible_safe_extract.py`, then `project_translation_to_subset.py` if an existing legacy baseline must be projected | Audit/subset workflow; not a row-mapped writeback source |
 | Raw profile/encyclopedia MonoBehaviour strings missed by the normal pass | `extract_character_profiles.py`, `writeback_character_profiles.py` | Automated one-column workflow |
 | Utage `ALL_Texts.book` / `ALL_EventTexts.book` in scenario assets or embedded assets | `extract_utage_scenarios.py`, `writeback_utage_scenarios.py` | Automated one-column workflow after confirming text column/books |
+| MonoBehaviour TypeTree fails, embedded Utage data is skipped, or Japanese remains after writeback | `extract_mono_raw_utf8.py`, occurrence approval, `writeback_mono_raw_utf8.py` | Two-stage raw-object audit; exact controls; external canary only when object spans resize |
 | `bansheegz_database` TextAsset plus `BGDatabase.dll`/`BansheeGz.BGDatabase` | Build a one-shot game-runtime export/write/save probe and reinsert the verified payload | Runtime-specific structured adapter |
 | Loose CSV/JSON/TXT or custom scenario string parsers | Inspect format and preserve its record/newline contract | Project-specific |
 | `0x06 + uint32 LE + UTF-8` length-prefixed records, often near a `DMSL` signature | `extract_dmsl_text.py`, `writeback_dmsl_text.py` | Fixed-byte occurrence workflow; byte budget is blocking |
 | TMP/UI `m_text`, label fields, or Unity Localization `m_TableData.*.m_Localized` | `extract_typetree_ui_text.py`, `writeback_typetree_ui_text.py` | TypeTree occurrence workflow with field-path verification |
 | Addressables catalogs/bundles or IL2CPP `global-metadata.dat` | Confirm exact runtime text, integrity metadata, and game-runtime loading before applying candidates | Project-specific |
+| Confirmed UGUI/TMP/IMGUI/TextMesh strings exist only at runtime, including IL2CPP, Naninovel, or GameCreator resolution | Validate the row-mapped CSV, then use `generate_autotranslator_txt.py`; provision any compatible loader/plugin separately | Optional global key-based candidate; no automatic deployment |
 | Rebuilt Addressables bundle loads to a black screen or logs CRC mismatch | `patch_addressables_catalog_crc.py`, then paired bundle/catalog canary | Binary catalog candidate; unique internal-name match only |
 | Chinese displayed as boxes/tofu in Mono/TMP games with JSON injection tables | `install_tmp_chinese_font_fix.py --dry-run`, then apply | Preflighted runtime fallback workflow |
 | TMP font bundle candidate for resource-level replacement | `trace_tmp_font_usage.py`, `inspect_tmp_font_bundle.py`, then one-font runtime canary | Visible-component identity and coverage gate |
@@ -209,6 +217,17 @@ python scripts/validate_translation_csv.py \
 ```
 
 Validation blocks row-count, placeholder, tag, and literal `\n` count mismatches by default. Use `--allow-newline-changes` only after confirming the game's parser or layout accepts the change.
+
+When runtime evidence proves that supported visible text cannot be reached statically, generate an AutoTranslator audit report from the exact source CSV and its normalized validated translation:
+
+```bash
+python scripts/generate_autotranslator_txt.py \
+  --source-csv "GameFolder/_translation/unity-text-report/text/GameTitle_ui_text.csv" \
+  --translation-csv "GameFolder/_translation/unity-text-report/validation/ui/GameTitle_ui_text_translation_utf8.csv" \
+  --out-dir "GameFolder/_translation/unity-text-report/runtime/autotranslator"
+```
+
+The default writes only `autotranslator_export_report.json`. Inspect it, then repeat with `--write` to create `_PreTranslated.txt`. Any row-count mismatch, conflicting or partly blank duplicate key, ambiguous plain-text key/value, or serialized-key collision blocks the whole candidate. The skill does not install BepInEx, XUnity.AutoTranslator, configs, or fonts; verify the external loader/plugin contract and complete a runtime canary as described in `runtime-text-adapters.md`.
 
 For full-automatic translation, convert a Unity source CSV to an AiNiee cache, translate it with `ainiee-translate`, then convert it back to a Unity translation CSV:
 
@@ -297,6 +316,17 @@ python scripts/writeback_utage_scenarios.py \
   --dry-run
 ```
 
+The extractor now blocks with `coverage_complete=false` when a requested book is missing or a skipped MonoBehaviour contains raw Japanese candidates. Audit those objects before continuing:
+
+```bash
+python scripts/extract_mono_raw_utf8.py \
+  --asset "CandidateRoot/Game_Data/sharedassets0.assets" \
+  --path-id 126 \
+  --out-dir "GameFolder/_translation/unity-text-report/residual/mono_raw"
+```
+
+Review the occurrence-level approval CSV, setting every action to `translate` or `preserve`, then rerun with `--approval-csv`. Follow [references/mono-raw-residual.md](references/mono-raw-residual.md); never approve by text value alone.
+
 ## Source Review
 
 Per-source extraction is deliberately occurrence-preserving, not an assertion that every row is safe to translate. Before translating or writing:
@@ -306,6 +336,7 @@ Per-source extraction is deliberately occurrence-preserving, not an assertion th
 - For an occurrence that shares the same original text with a visible row, translate only the visible row and leave the internal occurrence blank.
 - Keep an audit note for intentionally omitted categories when preparing a distributable patch.
 - Treat duplicate originals as separate occurrences when a per-source manifest exists; do not project by text value unless the workflow is explicitly legacy/audit-only and duplicate risk is reported.
+- Do not convert occurrence-specific choices into a runtime key when duplicate originals differ or mix selected and blank rows; a key-based hook would apply one result globally.
 
 The older broad cleaners can support exploration, but do not use a deduplicated CSV as a row-mapped writeback source.
 
@@ -313,7 +344,7 @@ The older broad cleaners can support exploration, but do not use a deduplicated 
 
 For a scenario stored as a serialized CSV-like string, inspect its real parser contract before writing. Preserve record separators, in-cell newlines, command columns, quoting behavior, and control tokens. Byte presence alone does not prove the scenario still parses.
 
-For Utage, check both `StreamingAssets/Utage_AdvProject` and embedded books in `sharedassets*.assets`. Confirm that column index `8` is the visible `Text` column before relying on the default; pass `--text-column` when a project differs.
+For Utage, check both `StreamingAssets/Utage_AdvProject` and embedded books in `sharedassets*.assets`. Confirm that column index `8` is the visible `Text` column before relying on the default; pass `--text-column` when a project differs. A TypeTree failure is a coverage failure, not a harmless skipped object. Use the raw-object audit for every skipped MonoBehaviour with Japanese candidates. Preserve the ordered CRLF/CR/LF signature recorded in the v2 manifest; marker count alone is insufficient.
 
 For a BansheeGz/BGDatabase payload embedded in a TextAsset, do not infer its serialized field format from exported bytes. If the game's managed API can load and save it, use a temporary runtime probe to export occurrences, compare each selected source value, write translated field values, and save a verified replacement payload. Remove all probe registration and DLLs before smoke-testing the normal game.
 
@@ -357,7 +388,7 @@ When asked for save locations, check the game's persistence middleware before as
 
 ## Patch Delivery
 
-Build a distributable package only from tested translated files and their original writeback backups:
+Build a distributable package only after the composed external candidate passes reopen checks, a second source-specific residual audit with zero unreviewed visible occurrences, font verification, and a game-runtime canary. Build from pristine original hashes directly to that final candidate, never incrementally from an earlier translation candidate:
 
 ```bash
 python scripts/build_binary_patch.py \
@@ -372,6 +403,8 @@ Repeat `--file` for each modified game file. The package stores SHA256-protected
 
 For changes spread throughout a large resaved asset, the binary middle-span payload may be large; report payload sizes rather than claiming small deltas.
 
+Install the ZIP into a fresh directory populated from the pristine originals. Require the installed hashes to match the live final candidate, confirm automatic backup creation and repeat-install behavior, and record the ZIP SHA256. Any later translation, residual, or font fix invalidates the package and requires a full rebuild and clean install test.
+
 ## Completion Cleanup
 
 After the validated game build is working, keep the final project-named source/translation CSVs and manifests, validation reports, applied writeback report, one original backup per modified game file, required runtime font DLL/config registration, and any distributable patch. Remove failed candidates, probe DLLs/registration backups, dry-run payload copies, duplicate backups, compile output, and staged `.tmp` files unless they are specifically needed to diagnose an unresolved issue.
@@ -385,7 +418,8 @@ Report:
 - validation failures/warnings and normalized translation paths
 - dry-run and applied writeback counts, skipped rows, backups, and source-hash checks
 - intentionally preserved identity/config/resource rows
-- runtime or residual checks completed and unresolved source categories
+- first and final residual-audit counts, every preserved internal category, and zero-unreviewed-visible evidence
+- runtime text candidate/report hashes, duplicate-key decisions, external loader/plugin evidence, canary result, and removal path when a runtime adapter was used
 - TMP font inspection report, required-character coverage, canary scope, visual result, and rollback path when fonts were changed
 - confirmed save path and persistence evidence when save-location work is requested
 - patch manifest, payload sizes, installer verification, and package ZIP when distributing

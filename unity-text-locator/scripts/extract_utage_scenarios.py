@@ -12,12 +12,24 @@ from pathlib import Path
 
 import UnityPy  # type: ignore
 
+from extract_mono_raw_utf8 import newline_events, scan_object
+
 
 DEFAULT_BOOKS = ("ALL_Texts.book", "ALL_EventTexts.book")
 
 
 def flat(text: str) -> str:
-    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
+    result: list[str] = []
+    index = 0
+    while index < len(text):
+        if text.startswith("\r\n", index):
+            result.append(r"\N")
+            index += 2
+            continue
+        char = text[index]
+        result.append({"\\": r"\\", "\r": r"\r", "\n": r"\n", "\t": r"\t"}.get(char, char))
+        index += 1
+    return "".join(result)
 
 
 def detect_game_root(asset: Path) -> Path:
@@ -64,7 +76,14 @@ def main() -> int:
         try:
             tree = obj.read_typetree()
         except Exception as exc:
-            skipped_objects.append({"path_id": obj.path_id, "reason": str(exc)})
+            raw_candidates = scan_object(obj.get_raw_data(), 12000, [])
+            skipped_objects.append(
+                {
+                    "path_id": obj.path_id,
+                    "reason": str(exc),
+                    "raw_japanese_candidates": len(raw_candidates),
+                }
+            )
             continue
         book = tree.get("m_Name")
         if book not in books:
@@ -74,7 +93,8 @@ def main() -> int:
                 strings = row.get("strings", [])
                 if len(strings) <= args.text_column:
                     continue
-                original_flat = flat(str(strings[args.text_column]))
+                original = str(strings[args.text_column])
+                original_flat = flat(original)
                 if not original_flat.strip():
                     continue
                 text_row = len(source_rows) + 1
@@ -89,6 +109,7 @@ def main() -> int:
                         "row_index": row.get("rowIndex"),
                         "text_column": args.text_column,
                         "original_flat": original_flat,
+                        "newline_events": newline_events(original),
                     }
                 )
                 book_counts[str(book)] = book_counts.get(str(book), 0) + 1
@@ -101,8 +122,12 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=["original_flat"], lineterminator="\n")
         writer.writeheader()
         writer.writerows(source_rows)
+    missing_books = sorted(books - set(book_counts))
+    unread_raw_candidates = sum(int(item.get("raw_japanese_candidates", 0)) for item in skipped_objects)
+    coverage_complete = not missing_books and unread_raw_candidates == 0
     manifest = {
-        "format": "utage-text-v1",
+        "format": "utage-text-v2",
+        "text_escape": "backslash-controls-exact-v1",
         "root": str(root),
         "asset": str(asset),
         "source_file": source_file,
@@ -113,6 +138,9 @@ def main() -> int:
         "text_column": args.text_column,
         "occurrences": occurrences,
         "skipped_objects": skipped_objects,
+        "missing_books": missing_books,
+        "unread_raw_japanese_candidates": unread_raw_candidates,
+        "coverage_complete": coverage_complete,
     }
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     result = {
@@ -122,9 +150,13 @@ def main() -> int:
         "rows": len(source_rows),
         "book_counts": book_counts,
         "skipped_objects": len(skipped_objects),
+        "missing_books": missing_books,
+        "unread_raw_japanese_candidates": unread_raw_candidates,
+        "coverage_complete": coverage_complete,
+        "fallback": "Run extract_mono_raw_utf8.py for skipped MonoBehaviour objects before writeback.",
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if coverage_complete else 2
 
 
 if __name__ == "__main__":

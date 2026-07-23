@@ -1,4 +1,4 @@
 interface:
   display_name: "Unity Translation Pipeline"
-  short_description: "Extract and localize Unity text, catalogs, and TMP fonts safely."
-  default_prompt: "Use $unity-text-locator to discover every visible Unity text source, including DMSL, component UI, and Localization StringTables; extract and validate occurrence-mapped translation CSVs; generate isolated writeback candidates; trace the actual TMP FontAsset used by failing components; diagnose Addressables CRC or glyph-index failures from logs and Unicode evidence; and require paired runtime canaries before packaging."
+  short_description: "Safely extract and localize Unity text and fonts."
+  default_prompt: "Use $unity-text-locator to discover Unity text sources, validate occurrence-mapped translations, choose a safe static or optional runtime adapter, and require a runtime canary before packaging."
