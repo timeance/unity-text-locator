@@ -1,6 +1,6 @@
 ---
 name: unity-text-locator
-description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, migrate translations across game versions, extract occurrence-mapped text from serialized assets, bytecode, UI, Localization StringTables, Utage, or middleware, bridge rows through AiNiee-style translation, validate and transactionally write approved candidates, audit residual and runtime-only text, diagnose TMP fonts and Addressables/IL2CPP failures, locate saves, or acceptance-test SHA-verified patches.
+description: Safely localize unknown Unity games, especially Japanese-to-Chinese projects. Use to discover Unity version/layout/backend, migrate translations across game versions, extract occurrence-mapped text from serialized assets, embedded CSV, bytecode, UI, Localization StringTables, Utage, or middleware, bridge rows through AiNiee-style translation, validate and transactionally write approved candidates, audit residual and runtime-only text or AutoTranslator diffs, diagnose TMP fonts and Addressables/IL2CPP failures, locate saves, or acceptance-test SHA-verified patches.
 ---
 
 # Unity Translation Workflow
@@ -34,6 +34,7 @@ Read [references/mono-raw-residual.md](references/mono-raw-residual.md) when Typ
 Read [references/font-asset-replacement.md](references/font-asset-replacement.md) before selecting, converting, or replacing any TMP font asset or font bundle.
 Read [references/runtime-text-adapters.md](references/runtime-text-adapters.md) before generating or testing an AutoTranslator candidate for IL2CPP, Naninovel, GameCreator, custom-rendered, or runtime-only text.
 Read [references/version-migration-and-release-audit.md](references/version-migration-and-release-audit.md) when porting a translation to a newer game version, separating scratch candidates from durable project evidence, selecting a runtime Locale/StringTable, auditing short bytecode choices or residual Japanese, choosing static CJK font coverage or smoke-test depth, or preparing a release-only patch baseline.
+Read [references/embedded-csv-and-runtime-diff.md](references/embedded-csv-and-runtime-diff.md) when Naninovel-like CSV data is embedded in assets or when comparing runtime AutoTranslator captures.
 
 Public repository release notes belong in GitHub Releases. Do not add `CHANGELOG.md` to the GitHub repository.
 
@@ -137,6 +138,7 @@ Legacy `original_flat,zh_cn` translation files remain accepted by validation/wri
 | TMP font bundle candidate for resource-level replacement | `trace_tmp_font_usage.py`, `inspect_tmp_font_bundle.py`, then one-font runtime canary | Visible-component identity and coverage gate |
 | Correct Unicode renders as another valid Chinese character | Verify CSV/code point, inspect populated TMP tables, then build a matched static set | Glyph-index conflict; not translation substitution |
 | IL2CPP game without a verified runtime loader | Inspect candidates or generate an exact-version TMP asset; do not use the Mono injector | Project-specific font workflow |
+| Embedded CSV signatures in `sharedassets*.assets` or bundles | `extract_embedded_csv.py` | Discovery-only occurrence manifest; no generic writeback |
 
 ## Core Commands
 
@@ -229,6 +231,24 @@ python scripts/generate_autotranslator_txt.py \
 ```
 
 The default writes only `autotranslator_export_report.json`. Inspect it, then repeat with `--write` to create `_PreTranslated.txt`. Any row-count mismatch, conflicting or partly blank duplicate key, ambiguous plain-text key/value, or serialized-key collision blocks the whole candidate. The skill does not install BepInEx, XUnity.AutoTranslator, configs, or fonts; verify the external loader/plugin contract and complete a runtime canary as described in `runtime-text-adapters.md`.
+
+For embedded CSV discovery, produce an occurrence-preserving audit before considering a runtime-specific writer:
+
+```bash
+python scripts/extract_embedded_csv.py "GameFolder" \
+  --out-dir "GameFolder/_translation/unity-text-report/text/embedded-csv"
+```
+
+For runtime candidate comparison, keep the diff separate from deployment:
+
+```bash
+python scripts/diff_autotranslator_files.py \
+  --old "GameFolder/_translation/unity-text-report/runtime/autotranslator/_PreTranslated.previous.txt" \
+  --new "GameFolder/_translation/unity-text-report/runtime/autotranslator/_PreTranslated.txt" \
+  --output "GameFolder/_translation/unity-text-report/runtime/autotranslator/runtime_diff.json"
+```
+
+Review removals and broad changes manually, then rerun the runtime canary. These adapters never merge or install runtime files.
 
 For full-automatic translation, convert a Unity source CSV to an AiNiee cache, translate it with `ainiee-translate`, then convert it back to a Unity translation CSV:
 

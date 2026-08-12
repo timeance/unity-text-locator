@@ -1,13 +1,14 @@
 ---
 name: ainiee-translate
-description: Translate books, documents, AiNiee projects, or Unity localization caches end-to-end on the coding agent itself without the AiNiee app. Use for requests such as "用 agent 翻译这本书", "把 epub 翻译了", "翻译 Unity CSV/cache", or "AiNiee-style translation" that need a locked glossary, resumable batches, terminology consistency, validated cache writeback, and export.
+description: >-
+  Translate books, documents, AiNiee projects, Unity localization caches, or flat MTool JSON dictionaries end to end on the coding agent itself without the AiNiee app. Use for requests such as "用 agent 翻译这本书", "把 epub 翻译了", "翻译 Unity CSV/cache", "把这个 MTool JSON 翻译了", or "AiNiee-style translation" that need a locked glossary, resumable batches or bounded subagent groups, terminology consistency, source-aware QA, validated cache writeback, and export. For MTool, preserve the left JSON key as immutable source text and write only the right value as translation.
 ---
 
 # ainiee-translate 技能指南
 
 ## 总览
 
-本技能让 **编码 agent 本身（Claude Code / Codex 等）** 充当翻译引擎，配合一组确定性 Python 管道脚本，把一本 epub/txt 小说**端到端翻译**：
+本技能让 **编码 agent 本身（Claude Code / Codex 等）** 充当翻译引擎，配合一组确定性 Python 管道脚本，把小说、文档或 MTool 本地化字典**端到端翻译**：
 
 ```
 parse → 构建锁定词汇表 → 逐章翻译（agent 按规则） → 写回缓存 → 导出成品
@@ -21,6 +22,11 @@ parse → 构建锁定词汇表 → 逐章翻译（agent 按规则） → 写回
 完整性门禁：写回前要求 `text_index` 唯一，写入使用锁和原子替换；批次存在 unmatched、验证存在 issue、或 Unity cache 缺行/状态未完成时默认退出非零。只有用户明确接受保留未译行时才使用 `--allow-partial`。
 
 本技能自带管道脚本（`scripts/ainiee_translate/`），无需单独 `pip install` 本包；解析/导出模块也随技能打包。跨设备复制后，只需要用本目录的 `requirements.txt` 为运行脚本的 Python 安装依赖。
+
+## 选择工作流
+
+- **书籍/普通文档**：继续使用本文件步骤 1–7；按章节或语义边界翻译。
+- **MTool 扁平 JSON**：在采取任何解析、分组、派发或写回动作前，完整阅读 [`references/mtool_translation.md`](references/mtool_translation.md)。MTool 的左侧 key 是运行时匹配原文，绝不改动；右侧 value 才是译文。其完整性交付、技术项直通、子代理并发和进度口径与书籍流程不同。
 
 ---
 
@@ -147,6 +153,9 @@ mkdir -p "$WORK/work" "$WORK/out"
   - 找不到时，在 AiNiee 应用的设置/数据目录里定位 `config.json`。
 - `--analysis` 可省略（无项目分析时跳过），形如 `.../ProjectCache/<project_id>/AinieeCacheData.json`。
 - 生成后，**必须人工 review 并锁定**：检查人名分类（是否保留原文）、地名/种族译法、音译唯一性。复核时特别注意：自动清洗按姓氏末词归并同一角色，可能把**同姓的不同角色**误并为一条——检查每条的 aliases 里没有混入另一个人。
+- 当前项目没有可靠分析缓存，或要补齐本书/本游戏专名时，先运行 `extract_terms` 从 `cache.json` 生成只读候选。默认只将 `confidence: high` 且合并后至少出现 2 行的候选交给人工审校；`resource_hints` 只能辅助比对，绝不进入词典。
+- 将确认译名写入 `term_translations.json` 后运行 `curate_terms` 导出 AiNiee `{src,dst,info}` 表。任一原文或别名对应多个译名时必须阻断导出，不得猜测或静默覆盖。
+- 候选提取、审校和导出不修改 `cache.json`；最终词条仍需并入并锁定 `glossary.locked.json` 后才能作为翻译权威。
 - 锁定表格式：
 
 ```json
@@ -274,6 +283,8 @@ mkdir -p "$WORK/work" "$WORK/out"
 
 完整流程（拆分、抽取、派发模板、风格漂移归一化、串行写回、收尾 verify）见 **`references/parallel_translation.md`**。
 
+若输入是 MTool JSON，不套用章节拆分模板；改用 **`references/mtool_translation.md`** 的候选选择、试跑估时、原子交付、动态补位和全键验证流程。
+
 ---
 
 ## 步骤 6：导出成品
@@ -346,6 +357,31 @@ verify 是**词汇表执行器**，不是**发现器**。它只能发现「锁�
 
 > 经验：写自查脚本做名字比对时，先归一化撇号（弯/直撇号 `'`/`'` 统一），否则 `Mak'ala`、`Quark's`、`O'Brien` 会因撇号不同被误判为「消失」。verify/scan 内部已统一处理。
 
+### 步骤 7.5：源感知结构审计与审慎修复
+
+对 MTool 分组或 AiNiee `cache.json` 转出的译文行，使用源感知审计补足普通 `verify` 的盲区：
+
+```bash
+<PFX> -m ainiee_translate.audit_translation \
+  --source "$WORK/work/source_rows.json" \
+  --translation "$WORK/work/translation_rows.json" \
+  --glossary "$WORK/work/glossary.locked.json" \
+  --repair-manifest "$WORK/work/repair_manifest.json"
+```
+
+它逐 `text_index` 检查控制符/标签、多类占位符、换行序列、日文对话引号及已锁定术语。`source_rows.json` 与 `translation_rows.json` 可以是批次数组，也可以由脚本接受 AiNiee cache 对象；MTool 左侧 key 仍不可修改。
+
+修复必须人工确认：在 manifest 对应项加入 `replacement` 后写入独立文件，再重新审计：
+
+```bash
+<PFX> -m ainiee_translate.apply_repairs \
+  --translation "$WORK/work/translation_rows.json" \
+  --manifest "$WORK/work/repair_manifest.json" \
+  --output "$WORK/work/translation_rows_repaired.json"
+```
+
+脚本要求 `expected_before` 精确匹配，拒绝过期修复；不得直接覆盖原始翻译或共享缓存。详细边界见 [`references/source-aware-qa.md`](references/source-aware-qa.md)。
+
 ---
 
 ## 附录 A：命令速查
@@ -366,6 +402,12 @@ $PFX -m ainiee_translate.parse --input book.epub --type AutoType --out "$WORK/wo
 # 词汇表
 $PFX -m ainiee_translate.glossary --config "<config.json>" --out "$WORK/work/glossary.locked.json"
 
+# 术语候选（只读、待人工确认）
+$PFX -m ainiee_translate.extract_terms --input "$WORK/work/cache.json" --output "$WORK/work/term_candidates.json"
+
+# 审校后导出 AiNiee {src,dst,info} 词典；同源或别名冲突会阻断
+$PFX -m ainiee_translate.curate_terms --candidates "$WORK/work/term_candidates.json" --translations "$WORK/work/term_translations.json" --output "$WORK/work/terms_ainiee.json"
+
 # 用户自定义提示词（汇总 AiNiee 配置里的自定义提示词）
 $PFX -m ainiee_translate.prompt --config "~/Library/Application Support/AiNiee/config.json" --out work/user_prompt.md
 
@@ -383,6 +425,9 @@ $PFX -m ainiee_translate.verify "$WORK/work/cache.json" "$WORK/work/glossary.loc
 
 # 发现（补 verify 盲区：表外被音译/丢失的专名 + 术语漏译 + 幻觉错名 + OCR 粘连词）
 $PFX -m ainiee_translate.scan "$WORK/work/cache.json" --locked "$WORK/work/glossary.locked.json" --mode all
+
+# MTool 专项辅助（审计 / 拆组 / 验收 / 进度 / 合并 / 最终键验证）
+$PFX -m ainiee_translate.mtool --help
 ```
 
 ---
