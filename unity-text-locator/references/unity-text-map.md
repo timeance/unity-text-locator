@@ -20,7 +20,7 @@
 | Clue | Likely system | Text strategy |
 | --- | --- | --- |
 | `Fungus`, `Flowchart`, `SayDialog` | Fungus | Export MonoBehaviours and scene objects |
-| `.yarn`, `YarnProject`, `YarnSpinner` | Yarn Spinner | Extract Yarn files or TextAssets |
+| `.yarn`, `YarnProject`, `YarnSpinner`, `Yarn.Unity.Localization` | Yarn Spinner | Locate the active locale's line table in Yarn files, TextAssets, or serialized objects |
 | `.ink`, `Ink`, `InkJSON` | ink | Extract JSON/TextAssets |
 | `scenario`, `script`, `message`, `dialog`, `talk`, `quest` | Custom VN/RPG tables | Search loose files and TextAssets first |
 | `.lua`, `xlua`, `slua`, `MoonSharp` | Lua scripting | Extract scripts from StreamingAssets/TextAssets |
@@ -32,6 +32,13 @@
 | `ES3`, `ES3Defaults`, `SaveFile.es3`, `AutoSave.es3` | Easy Save 3 persistence | Inspect defaults resource and confirm actual save path/timestamps |
 
 ## Tool Selection
+
+For a serialized Yarn locale table, compare the broad scan against the object's
+line IDs and complete values, including long lines, single characters and split
+dialogue. If its TypeTree is stripped, use the [object-relative UTF-8 audit](mono-raw-residual.md)
+when the record layout matches. Reconcile occurrences by asset, PathID and record
+location. Give each occurrence one writeback manifest and keep overlapping scans
+as audit evidence. Report any table entries you could not reconcile.
 
 - AssetRipper: best first broad export when the user wants a browsable project-like dump.
 - UABEA: useful for manual inspection/editing of `.assets` and bundles.

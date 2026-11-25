@@ -46,7 +46,7 @@ Full-automatic mode extracts Unity text, converts each source CSV to an AiNiee `
 
 ## Work Directory
 
-Keep work products under the game root:
+Use this layout during extraction, translation and validation:
 
 ```text
 GameFolder/_translation/unity-text-report/
@@ -428,7 +428,12 @@ Install the ZIP into a fresh directory populated from the pristine originals. Re
 
 ## Completion Cleanup
 
-After the validated game build is working, keep the final project-named source/translation CSVs and manifests, validation reports, applied writeback report, one original backup per modified game file, required runtime font DLL/config registration, and any distributable patch. Remove failed candidates, probe DLLs/registration backups, dry-run payload copies, duplicate backups, compile output, and staged `.tmp` files unless they are specifically needed to diagnose an unresolved issue.
+After translation and validation, **move** this run's working files into two folders under the translation workspace's `tmp/`, grouped by game:
+
+- `tmp/可删除的临时文件/<游戏名>/` holds reproducible unpacked copies, superseded candidates, disposable probes, duplicate caches, and build or patch-test output. The user decides when to delete them.
+- `tmp/翻译工程/<游戏名>/` holds what is needed to resume, rebuild, verify or roll back: source and translated tables, occurrence manifests, glossary, authoritative cache, editable artwork, scripts and inputs, one original backup per changed file, and final test evidence. Keep uncertain items here.
+
+Leave the original game, personal saves, runnable delivery and its runtime dependencies in place. Resolve move paths within the intended workspace, preserve relative structure, and use a fresh run subfolder on collision. Record old and new paths with the project, update launch/rebuild and rollback instructions, and check that their inputs resolve after the move. Preserve source-hash manifests as evidence.
 
 ## Required Reporting
 

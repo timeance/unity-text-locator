@@ -72,6 +72,13 @@ Before writing:
 
 Use `build_static_tmp_fontasset.py` only after all explicit target PathIDs are known. UnityPy reopening proves structural readability only; it does not prove GPU texture upload, shader compatibility, glyph coordinates, bundle integrity, or game-runtime loading.
 
+When cloning a TMP object across serialized files, resolve each PPtr in the
+source file first. Remap its referenced file and object into the destination's
+external-file table or use FileID 0 for a local target. Reopen the **composed**
+candidate and follow FontAsset, Material, Shader and atlas references to the
+expected objects. Check UI and dialogue glyph coverage separately against the
+fallback chain reachable from each component.
+
 ## Runtime Canary
 
 Use a screen containing representative simplified Chinese, punctuation, Latin text, symbols, and any retained Japanese names. Fully exit and restart the game between candidates so an old atlas cannot remain in memory.
@@ -87,4 +94,4 @@ On the first visual regression, stop, preserve the screenshot and candidate repo
 
 ## Completion
 
-Keep the final candidate report, applied write report, one rollback backup per modified file, and runtime evidence. Remove failed candidates, duplicate backups, temporary extraction roots, isolation assets, and stale logs only after the user confirms the final build works and approves the deletion list.
+Keep the final font report, applied write report, one rollback backup per modified file, and runtime evidence with the translation project. Move disposable font trials according to [completion cleanup](../SKILL.md#completion-cleanup).

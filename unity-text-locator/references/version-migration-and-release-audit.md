@@ -39,7 +39,7 @@ Use three storage classes instead of scattering project-named directories across
 
 Keep rebuilt runtime candidates outside the game root until application. A broad scanner may rediscover candidates under the game, and a custom loader may enumerate unexpected files even when Unity Addressables normally uses explicit paths.
 
-At completion, copy only durable reports and rollback evidence into `_translation`; delete the entire external run root after verifying its resolved path. Do not archive failed binary candidates merely because they were expensive to produce. Never leave ad hoc scripts or duplicate release archives at the workspace root.
+These are working locations. At delivery, move project evidence and disposable run output according to [completion cleanup](../SKILL.md#completion-cleanup).
 
 ## Map Resources by Internal Identity
 
@@ -184,7 +184,11 @@ Use the cheapest conclusive layer first:
 
 Do not wait indefinitely for a Unity log that the build does not create. Record that no fresh log exists, then use a visual canary or player confirmation. Do not claim paths that were not exercised.
 
-After binary writeback, rerun at least the process layer even if the same candidate passed before it was copied into the formal game root.
+Within the authorized test scope, exercise dynamically generated content through the game's own lookup or rendering path. For example, enumerate base and upgraded descriptions and menu option labels or input hints. Record the states checked and the expected versus observed counts. A headless probe can verify resolved strings. Verify wrapping and clipping on screen.
+
+If a populated gallery or list becomes empty after conversion, compare entry counts from the same reader and game state in the original and candidate. Identify the consumer of each index file and its encoding contract. Keep internal-only tables byte-identical where possible, including a legacy encoding required by a plugin. Recheck through that reader after restoring a table.
+
+After binary writeback, recheck the installed game through the authorized runtime path, or record the user's manual acceptance when they perform that check.
 
 ## Build a Release Against One Baseline
 
@@ -211,15 +215,4 @@ Keep the last tested archive immutable. Replace an older release only after all 
 
 ## Clean Up Without Losing Evidence
 
-Keep:
-
-- final source and translation CSVs plus manifests
-- normalized validation and residual reports
-- applied writeback report
-- one untouched original backup for every released file
-- final patch archive and acceptance-test report
-- rollback-critical font or catalog evidence
-
-Remove external candidates, extracted patch-test roots, failed experiments, duplicate archives, ad hoc migration scripts, logs with no diagnostic value, compile output, and staged temporary files after the release is verified.
-
-Before recursive cleanup, resolve and verify every exact target remains inside the intended workspace. Do not remove another version's baseline or another worktree.
+Follow [completion cleanup](../SKILL.md#completion-cleanup). For migrations, retain the version mapping, rollback-critical font or catalog evidence, installer verification, and original baselines needed to reproduce the release.

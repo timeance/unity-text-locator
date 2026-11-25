@@ -8,6 +8,12 @@ from uuid import uuid4
 _APOS = {"'": "'", "ʼ": "'", "＇": "'", "’": "'"}
 _CJK = re.compile(r"[一-鿿]")
 
+# Numeric percentages can precede a stat label on translated game screens.
+PRINTF_TOKEN = (
+    r"(?:%%|(?!(?<=\d)% *(?:HP|MP|SP)(?![A-Za-z0-9_]))"
+    r"%(?:\d+\$)?[-+#0 ]*\d*(?:\.\d+)?[A-Za-z])"
+)
+
 
 def backup_file(path: str) -> str:
     """Create a collision-resistant backup alongside *path*."""

@@ -9,11 +9,15 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .helpers import PRINTF_TOKEN
+else:
+    from helpers import PRINTF_TOKEN
 
 TOKEN_RE = re.compile(
     r"\\[A-Za-z]+\[[^\]\r\n]*\]|\\[.!|^]|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|\{\{[^{}\r\n]+\}\}|\{\d+\}|<[/A-Za-z][^<>\r\n]*>"
 )
-PLACEHOLDER_RE = re.compile(r"%(?:\d+\$)?[+#0\- ]*\d*(?:\.\d+)?[A-Za-z]|\$\{[^}\r\n]+\}")
+PLACEHOLDER_RE = re.compile(PRINTF_TOKEN + r"|\$\{[^}\r\n]+\}")
 JP_QUOTE_CHARS = "「」『』"
 
 

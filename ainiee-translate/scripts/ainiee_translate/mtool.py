@@ -14,10 +14,15 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .helpers import PRINTF_TOKEN
+else:
+    from helpers import PRINTF_TOKEN
+
 CONTROL_TOKEN_RE = re.compile(
     r"\\[A-Za-z]+\[[^\]\r\n]*\]"  # RPG-style control code, e.g. \V[1]
     r"|\{[^{}\r\n]+\}"              # brace placeholder
-    r"|%(?:\d+\$)?[-+#0-9.]*[A-Za-z%]"  # printf-style placeholder
+    rf"|{PRINTF_TOKEN}"
     r"|\$[A-Za-z_][A-Za-z0-9_]*"     # dollar variable
     r"|</?[A-Za-z][^<>\r\n]*?>"      # markup tag; <なし> is visible text, not a tag
 )

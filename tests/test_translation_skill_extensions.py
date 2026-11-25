@@ -38,6 +38,22 @@ RUNTIME_DIFF = load_script(
 
 
 class AiNieeExtensionTests(unittest.TestCase):
+    def test_percentage_units_and_real_placeholders_in_both_validators(self) -> None:
+        cases = [
+            ("HP35%", "恢复35%HP", True),
+            ("MP 12.5%", "恢复12.5% MP", True),
+            ("35%HP %s", "35%体力 %d", False),
+            ("%1$02d / %s", "%1$d / %s", False),
+            ("%%s", "%%文本", True),
+            ("%s%%", "%%", False),
+        ]
+        for original, translated, valid in cases:
+            with self.subTest(original=original, translated=translated):
+                src = [{"text_index": 1, "source_text": original}]
+                dst = [{"text_index": 1, "translated_text": translated}]
+                self.assertEqual(audit_translation.audit(src, dst, None)["valid"], valid)
+                self.assertEqual(mtool.validate_records(src, dst)["valid"], valid)
+
     def test_mtool_group_validation_preserves_control_markers(self) -> None:
         source = [{"text_index": 1, "source_text": r"\C[23]愛菜\C[0]\n次"}]
         translation = [{"text_index": 1, "translated_text": "爱菜"}]
